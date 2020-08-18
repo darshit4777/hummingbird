@@ -1,10 +1,11 @@
 #include "ros/ros.h"
 #include <Eigen/Dense>
-#include "flight_control.hpp"
+#include "xfour_controller/flight_control.hpp"
 #include "geometry_msgs/PoseStamped.h"
 #include "geometry_msgs/Twist.h"
 #include "geometry_msgs/Quaternion.h"
 #include "algorithm"
+#include "mav_msgs/Actuators.h"
 FlightController::FlightController(ros::NodeHandle* nodehandle)
 {
     
@@ -44,12 +45,12 @@ FlightController::FlightController(ros::NodeHandle* nodehandle)
     m_mass = 1.0; 
     m_g = 9.8134;
 
-    _positionSubscriber = _nh.subscribe("/hummingbird/ground_truth/pose",10,&FlightController::m_positionCallback,this);
-    _inertialSubscriber = _nh.subscribe("/hummingbird/imu",10,&FlightController::m_inertialCallback,this);
-    _velocitySubscriber = _nh.subscribe("/commanded_velocity",10,&FlightController::m_velocityCallback,this);
-    _orientationSubscriber = _nh.subscribe("/commanded_orientation",10,&FlightController::m_orientationCallback,this);
+    _positionSubscriber = _nh.subscribe("/hummingbird/ground_truth/pose",10,&FlightController::PositionCallback,this);
+    _inertialSubscriber = _nh.subscribe("/hummingbird/imu",10,&FlightController::InertialCallback,this);
+    _velocitySubscriber = _nh.subscribe("/commanded_velocity",10,&FlightController::VelocityCallback,this);
+    _orientationSubscriber = _nh.subscribe("/commanded_orientation",10,&FlightController::OrientationCallback,this);
 
-    _motorCommandPublisher = _nh.advertise('/hummingbird/command/motors',10);
+    _motorCommandPublisher = _nh.advertise<mav_msgs::Actuators>("/hummingbird/command/motors",10);
 
     return;
 };
@@ -117,12 +118,12 @@ Eigen::Vector3d FlightController::CaclulateSaturationEpsilon(Eigen::Vector3d vel
         
 }
 
-void FlightController::PositionCallback(const geometry_msgs::PoseStamped* position){
+void FlightController::PositionCallback(const geometry_msgs::PoseStamped::ConstPtr& position){
     m_position = *position;
     return;
 };
 
-void FlightController::InertialCallback(const sensor_msgs::Imu* imu){
+void FlightController::InertialCallback(const sensor_msgs::Imu::ConstPtr& imu){
     sensor_msgs::Imu imuMessage = *imu;
     m_angularVelocity[0] = imuMessage.angular_velocity.x;
     m_angularVelocity[1] = imuMessage.angular_velocity.y;
@@ -134,7 +135,7 @@ void FlightController::InertialCallback(const sensor_msgs::Imu* imu){
     return;
 };
 
-void FlightController::VelocityCallback(const geometry_msgs::Twist* commandedTwist){
+void FlightController::VelocityCallback(const geometry_msgs::Twist::ConstPtr& commandedTwist){
     
     geometry_msgs::Twist twistMessage = *commandedTwist;
     m_velocityCommandedPrevious = m_velocityCommanded;
@@ -142,8 +143,14 @@ void FlightController::VelocityCallback(const geometry_msgs::Twist* commandedTwi
     m_velocityCommanded[1] = twistMessage.linear.y;
     m_velocityCommanded[2] = twistMessage.linear.z;
     
+    return;
+};
 
-}
+void FlightController::OrientationCallback(const geometry_msgs::Quaternion::ConstPtr& commandedQuaternion){
+    return;
+};
+
+
 
 
 

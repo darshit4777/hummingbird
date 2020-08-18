@@ -13,6 +13,11 @@ find_package(catkin REQUIRED COMPONENTS
   tf
   tf2
   tf2_ros
+  tf2_eigen
+  tf2_geometry_msgs
+  tf2_msgs
+  tf2_tools
+  
 )
 
 ## System dependencies are found with CMake's conventions
@@ -148,7 +153,7 @@ add_executable(flight_control_node src/flight_control.cpp)
 add_dependencies(flight_control_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 ## Specify libraries to link a library or executable target against
-target_link_libraries(${PROJECT_NAME}_node
+target_link_libraries(flight_control_node
    ${catkin_LIBRARIES}
  )
 

@@ -79,10 +79,10 @@ public:
 /** Class constructor */
 FlightController(ros::NodeHandle* nodehandle);
 
-void PositionCallback(const geometry_msgs::PoseStamped* position);
-void InertialCallback(const sensor_msgs::Imu* imu);
-void VelocityCallback(const geometry_msgs::Twist* commandedTwist);
-void OrientationCallback(const geometry_msgs::Quaternion* commandedQuaternion);
+void PositionCallback(const geometry_msgs::PoseStamped::ConstPtr& position);
+void InertialCallback(const sensor_msgs::Imu::ConstPtr& imu);
+void VelocityCallback(const geometry_msgs::Twist::ConstPtr& commandedTwist);
+void OrientationCallback(const geometry_msgs::Quaternion::ConstPtr& commandedQuaternion);
 void CalculateThrust();
 Eigen::Vector3d CaclulateSaturationEpsilon(Eigen::Vector3d velocity, Eigen::Vector3d velocityCommanded);
 
