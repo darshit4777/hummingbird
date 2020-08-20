@@ -57,7 +57,6 @@ find_package(Boost REQUIRED COMPONENTS system)
 add_message_files(
    FILES
    YawVelocity.msg
-#   Message2.msg
  )
 
 ## Generate services in the 'srv' folder
@@ -75,10 +74,10 @@ add_message_files(
 # )
 
 ## Generate added messages and services with any dependencies listed here
-# generate_messages(
-#   DEPENDENCIES
-#   std_msgs  # Or other packages containing msgs
-# )
+generate_messages(
+   DEPENDENCIES
+   std_msgs  # Or other packages containing msgs
+)
 
 ################################################
 ## Declare ROS dynamic reconfigure parameters ##

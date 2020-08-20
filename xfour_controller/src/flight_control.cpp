@@ -6,6 +6,7 @@
 #include "geometry_msgs/Quaternion.h"
 #include "algorithm"
 #include "mav_msgs/Actuators.h"
+#include "xfour_controller/YawVelocity.h"
 FlightController::FlightController(ros::NodeHandle* nodehandle)
 {
     
@@ -119,39 +120,60 @@ Eigen::Vector3d FlightController::CaclulateSaturationEpsilon(Eigen::Vector3d vel
 }
 
 void FlightController::PositionCallback(const geometry_msgs::PoseStamped::ConstPtr& position){
+    // Sensor Callback from ground truth or position sensors
     m_position = *position;
     return;
 };
 
 void FlightController::InertialCallback(const sensor_msgs::Imu::ConstPtr& imu){
+    // Sensor Callback from the IMU sensor
     sensor_msgs::Imu imuMessage = *imu;
+    m_angularVelocityPrevious = m_angularVelocity;
     m_angularVelocity[0] = imuMessage.angular_velocity.x;
     m_angularVelocity[1] = imuMessage.angular_velocity.y;
     m_angularVelocity[2] = imuMessage.angular_velocity.z;
     m_acceleration[0] = imuMessage.linear_acceleration.x;
     m_acceleration[1] = imuMessage.linear_acceleration.y;
     m_acceleration[2] = imuMessage.linear_acceleration.z;
+    m_orientationQuaternionPrevious = m_orientationQuaternion;
+    m_orientationQuaternion = imuMessage.orientation;
 
     return;
 };
 
-void FlightController::VelocityCallback(const geometry_msgs::Twist::ConstPtr& commandedTwist){
+void FlightController::VelocityCallback(const geometry_msgs::Twist::ConstPtr& measuredTwist){
+    // Sensor Callback for velocity
+
+    geometry_msgs::Twist twistMessage = *measuredTwist;
+    m_velocityPrevious = m_velocity;
+    m_velocity[0] = twistMessage.linear.x;
+    m_velocity[1] = twistMessage.linear.y;
+    m_velocity[2] = twistMessage.linear.z;
     
-    geometry_msgs::Twist twistMessage = *commandedTwist;
+    return;
+};
+
+void FlightController::CommandCallback(const xfour_controller::YawVelocity::ConstPtr& command){
+    // Callback for commands to robot
+
     m_velocityCommandedPrevious = m_velocityCommanded;
-    m_velocityCommanded[0] = twistMessage.linear.x;
-    m_velocityCommanded[1] = twistMessage.linear.y;
-    m_velocityCommanded[2] = twistMessage.linear.z;
-    
+    m_velocityCommanded[0] = command->velocity_x;
+    m_velocityCommanded[1] = command->velocity_y;
+    m_velocityCommanded[2] = command->velocity_z;
+    m_commandedYawPrevious = m_commandedYaw;
+    m_commandedYaw = command->yaw;
     return;
 };
 
-void FlightController::OrientationCallback(const geometry_msgs::Quaternion::ConstPtr& commandedQuaternion){
-    return;
-};
-
-
-
+/** TODO 
+ * 1. Store the quaternion message - check if it needs to be transformed into anything else or 
+ * if it should remain a quaternion - Assuming things can remain a quaternion - but we may need to convert Rot. 
+ * matrices to quaternions for Rd calculation.
+ * 2. Write a method to convert incoming yaw command to a specific quaternion - this may result in two answers -
+ * Incoming yaw and velocity commands will be recieved as a single message called the YawVelocity message.
+ * 3. Write a method to subscribe to velocity commands. 
+ * 4. Test out the thrust function.
+*/ 
 
 
 int main(int argc, char **argv){
