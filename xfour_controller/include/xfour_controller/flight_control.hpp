@@ -1,8 +1,9 @@
 #include "ros/ros.h"
 #include <Eigen/Dense>
-#include "geometry_msgs/PoseStamped.h"
+#include "geometry_msgs/Pose.h"
 #include "sensor_msgs/Imu.h"
 #include "geometry_msgs/Quaternion.h"
+#include "nav_msgs/Odometry.h"
 #include "geometry_msgs/Twist.h"
 #include "xfour_controller/YawVelocity.h"
 
@@ -22,7 +23,7 @@ public:
     Eigen::Vector3d m_velocity;                     // Velocity of the robot in 3d space
     Eigen::Vector3d m_velocityPrevious;             // Velocity of the robot in the previous time step
     Eigen::Vector3d m_acceleration;                 // Acceleartion of the the robot in 3d space
-    geometry_msgs::PoseStamped m_position;                     // Position of the robot in 3d space
+    geometry_msgs::Pose m_position;                     // Position of the robot in 3d space
     struct orientation{
         double roll;
         double pitch;
@@ -75,7 +76,7 @@ private:
     ros::Subscriber _inertialSubscriber;
     ros::Subscriber _velocitySubscriber;
     ros::Subscriber _orientationSubscriber;
-    
+    ros::Subscriber _commandSubscriber;
     ros::Publisher _motorCommandPublisher;
 
 // Listing all methods
@@ -83,10 +84,9 @@ public:
 /** Class constructor */
 FlightController(ros::NodeHandle* nodehandle);
 
-void PositionCallback(const geometry_msgs::PoseStamped::ConstPtr& position);
+void PositionCallback(const geometry_msgs::Pose::ConstPtr& position);
 void InertialCallback(const sensor_msgs::Imu::ConstPtr& imu);
-void VelocityCallback(const geometry_msgs::Twist::ConstPtr& measuredTwist);
-void OrientationCallback(const geometry_msgs::Quaternion::ConstPtr& commandedQuaternion);
+void VelocityCallback(const nav_msgs::Odometry::ConstPtr& measuredOdometry);
 void CommandCallback(const xfour_controller::YawVelocity::ConstPtr& commandMessage);
 void CalculateThrust();
 Eigen::Vector3d CaclulateSaturationEpsilon(Eigen::Vector3d velocity, Eigen::Vector3d velocityCommanded);

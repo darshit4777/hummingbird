@@ -34,6 +34,11 @@ FlightController::FlightController(ros::NodeHandle* nodehandle)
 
     m_thrust = 0.0;
     m_torque.setZero();
+
+    m_velocityCommanded.setZero();
+    m_velocityCommandedPrevious.setZero();
+    m_commandedYaw = 0.0;
+    m_commandedYawPrevious = 0.0;
     
     // Initializing all tunable parameters 
     m_tuningParams.gamma = 1.0;
@@ -41,6 +46,11 @@ FlightController::FlightController(ros::NodeHandle* nodehandle)
     m_tuningParams.k_thrust = 1.0;
     m_tuningParams.sigma = 1.0;
     m_loopTime = 0.1;
+    m_velocityErrorLimit[0] = 2.0;
+    m_velocityErrorLimit[1] = 2.0;
+    m_velocityErrorLimit[2] = 2.0;
+
+
 
     // Initializing physical constants
     m_mass = 1.0; 
@@ -48,8 +58,8 @@ FlightController::FlightController(ros::NodeHandle* nodehandle)
 
     _positionSubscriber = _nh.subscribe("/hummingbird/ground_truth/pose",10,&FlightController::PositionCallback,this);
     _inertialSubscriber = _nh.subscribe("/hummingbird/imu",10,&FlightController::InertialCallback,this);
-    _velocitySubscriber = _nh.subscribe("/commanded_velocity",10,&FlightController::VelocityCallback,this);
-    _orientationSubscriber = _nh.subscribe("/commanded_orientation",10,&FlightController::OrientationCallback,this);
+    _velocitySubscriber = _nh.subscribe("/hummingbird/ground_truth/odometry",10,&FlightController::VelocityCallback,this);
+    _commandSubscriber = _nh.subscribe("/controller_command",10,&FlightController::CommandCallback,this);
 
     _motorCommandPublisher = _nh.advertise<mav_msgs::Actuators>("/hummingbird/command/motors",10);
 
@@ -65,9 +75,13 @@ void FlightController::CalculateThrust(){
      */
 
     Eigen::Vector3d velocityCommanded_derivative;
+    // Velocity commanded derivative is given a negative sign as the Z axis in the paper is described as going into ground
     velocityCommanded_derivative = (m_velocityCommanded -  m_velocityCommandedPrevious)/m_loopTime;
-    
-    velocityCommanded_derivative[2] = velocityCommanded_derivative[2] - m_g;
+    ROS_INFO("The velocity derivative is ");
+    ROS_INFO_STREAM(velocityCommanded_derivative[0]);
+    ROS_INFO_STREAM(velocityCommanded_derivative[1]);
+    ROS_INFO_STREAM(velocityCommanded_derivative[2]);
+    velocityCommanded_derivative[2] = -velocityCommanded_derivative[2] - m_g;
 
     Eigen::Vector3d saturatedEpsilon;
     saturatedEpsilon = CaclulateSaturationEpsilon(m_velocity,m_velocityCommanded);
@@ -75,8 +89,11 @@ void FlightController::CalculateThrust(){
     
     Eigen::Vector3d thrustVector;
     thrustVector = -m_mass*velocityCommanded_derivative + saturatedEpsilon;
+    ROS_INFO_STREAM("The thrust vector is ..");
+    ROS_INFO_STREAM(thrustVector);
     
-    m_thrust = thrustVector.squaredNorm();
+    m_thrust = std::sqrt(thrustVector.squaredNorm());
+    
     return; 
 };
 
@@ -87,8 +104,8 @@ Eigen::Vector3d FlightController::CaclulateSaturationEpsilon(Eigen::Vector3d vel
      */
 
     Eigen::Vector3d epsilon;
-    epsilon.setZero();
-    epsilon = velocity - velocityCommanded;
+    epsilon.setZero(); 
+    epsilon = (velocityCommanded - velocity);
 
     // Saturation
     if (epsilon[0] < 0){
@@ -114,12 +131,13 @@ Eigen::Vector3d FlightController::CaclulateSaturationEpsilon(Eigen::Vector3d vel
     {
         epsilon[2] = std::min(epsilon[2],m_velocityErrorLimit[2]);
     };
-    
+    ROS_INFO("The value of epsilon is ");
+    ROS_INFO_STREAM(epsilon);
     return epsilon;
         
 }
 
-void FlightController::PositionCallback(const geometry_msgs::PoseStamped::ConstPtr& position){
+void FlightController::PositionCallback(const geometry_msgs::Pose::ConstPtr& position){
     // Sensor Callback from ground truth or position sensors
     m_position = *position;
     return;
@@ -141,14 +159,14 @@ void FlightController::InertialCallback(const sensor_msgs::Imu::ConstPtr& imu){
     return;
 };
 
-void FlightController::VelocityCallback(const geometry_msgs::Twist::ConstPtr& measuredTwist){
+void FlightController::VelocityCallback(const nav_msgs::Odometry::ConstPtr& measuredOdometry){
     // Sensor Callback for velocity
 
-    geometry_msgs::Twist twistMessage = *measuredTwist;
+    nav_msgs::Odometry odometryMessage = *measuredOdometry;
     m_velocityPrevious = m_velocity;
-    m_velocity[0] = twistMessage.linear.x;
-    m_velocity[1] = twistMessage.linear.y;
-    m_velocity[2] = twistMessage.linear.z;
+    m_velocity[0] = odometryMessage.twist.twist.linear.x;
+    m_velocity[1] = odometryMessage.twist.twist.linear.y;
+    m_velocity[2] = odometryMessage.twist.twist.linear.z;
     
     return;
 };
@@ -165,21 +183,28 @@ void FlightController::CommandCallback(const xfour_controller::YawVelocity::Cons
     return;
 };
 
+
 /** TODO 
  * 1. Store the quaternion message - check if it needs to be transformed into anything else or 
  * if it should remain a quaternion - Assuming things can remain a quaternion - but we may need to convert Rot. 
  * matrices to quaternions for Rd calculation.
- * 2. Write a method to convert incoming yaw command to a specific quaternion - this may result in two answers -
- * Incoming yaw and velocity commands will be recieved as a single message called the YawVelocity message.
- * 3. Write a method to subscribe to velocity commands. 
- * 4. Test out the thrust function.
+ * 2. Write the Thrust function
+ * 3. Test out the thrust function.
 */ 
 
 
 int main(int argc, char **argv){
     // Initialize the node 
+    
     ros::init(argc,argv,"flight_control");
-
-    ros::spin();
+    ros::NodeHandle nh;
+    FlightController HummingBirdController(&nh);
+    while(ros::ok()){
+        HummingBirdController.CalculateThrust();
+        ROS_INFO("The commanded thrust is %f",HummingBirdController.m_thrust);
+        ros::spinOnce();    
+    };
+    
+    
 
 }
