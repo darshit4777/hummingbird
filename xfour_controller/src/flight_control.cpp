@@ -75,24 +75,34 @@ void FlightController::CalculateThrust(){
      */
 
     Eigen::Vector3d velocityCommanded_derivative;
-    // Velocity commanded derivative is given a negative sign as the Z axis in the paper is described as going into ground
-    velocityCommanded_derivative = (m_velocityCommanded -  m_velocityCommandedPrevious)/m_loopTime;
+    // Transforming the velocity commands into the control coordinate system before calculating thrust
+    Eigen::Vector3d velocityCommanded, velocityCommandedPrevious;
+    velocityCommanded = TransformMeasuredToControlCoordinates(m_velocityCommanded);
+    ROS_INFO("The transformed velocity is ");
+    ROS_INFO_STREAM(velocityCommanded);
+    velocityCommandedPrevious = TransformMeasuredToControlCoordinates(m_velocityCommandedPrevious);
+
+    velocityCommanded_derivative = (velocityCommanded -  velocityCommandedPrevious)/m_loopTime;
     ROS_INFO("The velocity derivative is ");
-    ROS_INFO_STREAM(velocityCommanded_derivative[0]);
-    ROS_INFO_STREAM(velocityCommanded_derivative[1]);
-    ROS_INFO_STREAM(velocityCommanded_derivative[2]);
-    velocityCommanded_derivative[2] = -velocityCommanded_derivative[2] - m_g;
+    ROS_INFO_STREAM(velocityCommanded_derivative);
+    velocityCommanded_derivative[2] = velocityCommanded_derivative[2] - m_g;
 
     Eigen::Vector3d saturatedEpsilon;
-    saturatedEpsilon = CaclulateSaturationEpsilon(m_velocity,m_velocityCommanded);
-    saturatedEpsilon = m_tuningParams.k_thrust * saturatedEpsilon;
+    // Transforming velocity to the control coordinates before calculating Epsilon
+    Eigen::Vector3d velocity = TransformMeasuredToControlCoordinates(m_velocity);
+    saturatedEpsilon = CaclulateSaturationEpsilon(velocity,velocityCommanded);
     
-    Eigen::Vector3d thrustVector;
-    thrustVector = -m_mass*velocityCommanded_derivative + saturatedEpsilon;
+    
+    m_thrustVector = -m_mass*velocityCommanded_derivative + m_tuningParams.k_thrust * saturatedEpsilon;
+    
+    // TODO : The sign of the thrust vector doesnt make sense right now - it should have a negative Z component.
+    // Let's leave it be for now - we can figure it out later. Therefore a transformation back to measured coordinates,
+    // is not needed right now. The sign of thrust may be accounted for elsewhere.
+    //thrustVector = TransformControlToMeasuredCoordinates(thrustVector);
+    
     ROS_INFO_STREAM("The thrust vector is ..");
-    ROS_INFO_STREAM(thrustVector);
-    
-    m_thrust = std::sqrt(thrustVector.squaredNorm());
+    ROS_INFO_STREAM(m_thrustVector);    
+    m_thrust = std::sqrt(m_thrustVector.squaredNorm());
     
     return; 
 };
@@ -105,7 +115,7 @@ Eigen::Vector3d FlightController::CaclulateSaturationEpsilon(Eigen::Vector3d vel
 
     Eigen::Vector3d epsilon;
     epsilon.setZero(); 
-    epsilon = (velocityCommanded - velocity);
+    epsilon = (velocity - velocityCommanded);
 
     // Saturation
     if (epsilon[0] < 0){
@@ -183,13 +193,50 @@ void FlightController::CommandCallback(const xfour_controller::YawVelocity::Cons
     return;
 };
 
+Eigen::Vector3d FlightController::TransformMeasuredToControlCoordinates(Eigen::Vector3d measuredCoordinates){
+    /**
+     * The coordinate frame in which the measurements are made is a general Z - up coordinated system.
+     * The coordinate frame for calculating control inputs is a Z - down coordinate system. This function
+     * rotates the incoming vector by 180 degrees about the X axis
+    */
+
+    // Using Eigen Axis Angle transform
+    Eigen::Vector3d xAxis;
+    
+    xAxis << 1.0 , 0.0 , 0.0;       // Creating the X Axis
+    double rotationAngle = M_PI;    // Rotation by pi
+    Eigen::Transform<double,3,2> measuredToControl;
+    measuredToControl = Eigen::AngleAxis<double>(rotationAngle,xAxis);                          // Creating the Transform
+    Eigen::Vector3d controlCoordinates = measuredToControl * measuredCoordinates;       // Multiplying transform to get control Coordinates
+    
+    return controlCoordinates;  
+};
+
+Eigen::Vector3d FlightController::TransformControlToMeasuredCoordinates(Eigen::Vector3d controlCoordinates){
+    /**
+     * The coordinate frame in which the measurements are made is a general Z - up coordinated system.
+     * The coordinate frame for calculating control inputs is a Z - down coordinate system. This function
+     * rotates the incoming vector by 180 degrees about the X axis
+    */
+
+    // Using Eigen Axis Angle transform
+    Eigen::Vector3d xAxis;
+    
+    xAxis << 1.0 , 0.0 , 0.0;       // Creating the X Axis
+    double rotationAngle = M_PI;    // Rotation by pi
+    Eigen::Transform<double,3,2> controlToMeasured;
+    controlToMeasured = Eigen::AngleAxis<double>(rotationAngle,xAxis);                          // Creating the Transform
+    Eigen::Vector3d measuredCoordinates = controlToMeasured * controlCoordinates;       // Multiplying transform to get control Coordinates
+    
+    return measuredCoordinates;  
+};
+
 
 /** TODO 
  * 1. Store the quaternion message - check if it needs to be transformed into anything else or 
  * if it should remain a quaternion - Assuming things can remain a quaternion - but we may need to convert Rot. 
  * matrices to quaternions for Rd calculation.
- * 2. Write the Thrust function
- * 3. Test out the thrust function.
+ * 2. Develop a system to convert measurement coordinates to control coordinates
 */ 
 
 
