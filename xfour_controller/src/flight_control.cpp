@@ -260,6 +260,27 @@ Eigen::Matrix3d FlightController::GetDesiredRotationMatrix(){
      * frame
      */
     Eigen::Matrix3d desiredRotationMatrix;
+    Eigen::Vector3d normalizedThrustVector, orientationVector;
+    normalizedThrustVector = m_thrustVector.normalized();
+    orientationVector = GetOrientationVectorFromQuaternion(m_orientationQuaternion);
+    
+    /**
+     * In the generation of the desired rotation matrix we, first generate the axis of rotation and
+     * the angle of rotation. In doing this we follow the convention of using the first vector as 
+     * the initial orientation vector in the world frame and the thrust vector as the second vector.
+     */
+    Eigen::Vector3d initialOrientation;
+    initialOrientation << 0.0 , 0.0 , 1.0;
+    double rotationAngle;
+    Eigen::Vector3d rotationAxis;
+    rotationAngle = GetAngleForDesiredRotation(initialOrientation,normalizedThrustVector);
+    rotationAxis = GetAxisForDesiredRotation(initialOrientation,normalizedThrustVector);
+    
+    // TODO : It is still not clear if the usage of the thrust vector with its current sign produces a 
+    // correct desired rotation matrix. We would have to fix that at some point.
+    desiredRotationMatrix = Eigen::AngleAxis<double>(rotationAngle,rotationAxis);
+    ROS_INFO_STREAM(desiredRotationMatrix);
+
     return desiredRotationMatrix;
 };
 
@@ -285,7 +306,7 @@ Eigen::Vector3d FlightController::GetOrientationVectorFromQuaternion(geometry_ms
  * 1. Store the quaternion message - check if it needs to be transformed into anything else or 
  * if it should remain a quaternion - Assuming things can remain a quaternion - but we may need to convert Rot. 
  * matrices to quaternions for Rd calculation.
- * 2. Develop a system to convert measurement coordinates to control coordinates
+ * 
 */ 
 
 
