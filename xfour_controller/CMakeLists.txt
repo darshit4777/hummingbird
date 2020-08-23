@@ -127,14 +127,14 @@ include_directories(
 )
 
 ## Declare a C++ library
-# add_library(${PROJECT_NAME}
-#   src/${PROJECT_NAME}/xfour_controller.cpp
-# )
+add_library(FLIGHTCONTROL
+   src/flight_control.cpp
+)
 
 ## Add cmake target dependencies of the library
 ## as an example, code may need to be generated before libraries
 ## either from message generation or dynamic reconfigure
-# add_dependencies(${PROJECT_NAME} ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+add_dependencies(FLIGHTCONTROL ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 ## Declare a C++ executable
 ## With catkin_make all packages are built within a single CMake context
@@ -153,6 +153,10 @@ add_dependencies(flight_control_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catki
 
 ## Specify libraries to link a library or executable target against
 target_link_libraries(flight_control_node
+   ${catkin_LIBRARIES}
+ )
+
+target_link_libraries(FLIGHTCONTROL
    ${catkin_LIBRARIES}
  )
 
@@ -203,7 +207,12 @@ target_link_libraries(flight_control_node
 #############
 
 ## Add gtest based cpp test target and link libraries
-# catkin_add_gtest(${PROJECT_NAME}-test test/test_xfour_controller.cpp)
+find_package(rostest REQUIRED)
+catkin_add_gtest(flight_control_test 
+  test/test_unit.cpp
+  test/flight_controller_unit_tests.cpp
+)
+target_link_libraries(flight_control_test FLIGHTCONTROL)
 # if(TARGET ${PROJECT_NAME}-test)
 #   target_link_libraries(${PROJECT_NAME}-test ${PROJECT_NAME})
 # endif()

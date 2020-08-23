@@ -91,9 +91,13 @@ void InertialCallback(const sensor_msgs::Imu::ConstPtr& imu);
 void VelocityCallback(const nav_msgs::Odometry::ConstPtr& measuredOdometry);
 void CommandCallback(const xfour_controller::YawVelocity::ConstPtr& commandMessage);
 void CalculateThrust();
+Eigen::Matrix3d GetDesiredRotationMatrix();
 Eigen::Vector3d CaclulateSaturationEpsilon(Eigen::Vector3d velocity, Eigen::Vector3d velocityCommanded);
 Eigen::Vector3d TransformMeasuredToControlCoordinates(Eigen::Vector3d measuredCoordinates);
 Eigen::Vector3d TransformControlToMeasuredCoordinates(Eigen::Vector3d controlCoordinates);
+Eigen::Vector3d GetAxisForDesiredRotation(Eigen::Vector3d firstVector, Eigen::Vector3d secondVector);
+Eigen::Vector3d GetOrientationVectorFromQuaternion(geometry_msgs::Quaternion orientationQuaternion);
+double GetAngleForDesiredRotation(Eigen::Vector3d firstVector, Eigen::Vector3d secondVector);
 
 };
 

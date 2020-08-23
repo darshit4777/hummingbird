@@ -225,12 +225,61 @@ Eigen::Vector3d FlightController::TransformControlToMeasuredCoordinates(Eigen::V
     xAxis << 1.0 , 0.0 , 0.0;       // Creating the X Axis
     double rotationAngle = M_PI;    // Rotation by pi
     Eigen::Transform<double,3,2> controlToMeasured;
-    controlToMeasured = Eigen::AngleAxis<double>(rotationAngle,xAxis);                          // Creating the Transform
-    Eigen::Vector3d measuredCoordinates = controlToMeasured * controlCoordinates;       // Multiplying transform to get control Coordinates
+    controlToMeasured = Eigen::AngleAxis<double>(rotationAngle,xAxis);              // Creating the Transform
+    Eigen::Vector3d measuredCoordinates = controlToMeasured * controlCoordinates;   // Multiplying transform to get control Coordinates
     
     return measuredCoordinates;  
 };
 
+Eigen::Vector3d FlightController::GetAxisForDesiredRotation(Eigen::Vector3d firstVector, Eigen::Vector3d secondVector){
+    /** 
+     * This function will calculate the axis of rotation between two vectors by using a vector
+     * cross product.
+    */
+
+    Eigen::Vector3d rotationAxis;
+    rotationAxis = firstVector.cross(secondVector);
+    return rotationAxis;
+};
+
+double FlightController::GetAngleForDesiredRotation(Eigen::Vector3d firstVector, Eigen::Vector3d secondVector){
+    /**
+     * This function will calculate the angle between two vectors in 3d space, about an axis 
+     * perpendicular to both the vectors. It uses the vector dot product for the same.
+     */
+    
+    double rotationAngle;
+    rotationAngle = firstVector.dot(secondVector);
+    return rotationAngle;
+};
+
+Eigen::Matrix3d FlightController::GetDesiredRotationMatrix(){
+    /**
+     * This function examines the calculated thrust vector and creates a desired rotation matrix
+     * The rotation matrix is defined as a rotation of the body frame with respect to the inertial
+     * frame
+     */
+    Eigen::Matrix3d desiredRotationMatrix;
+    return desiredRotationMatrix;
+};
+
+Eigen::Vector3d FlightController::GetOrientationVectorFromQuaternion(geometry_msgs::Quaternion orientationQuaternion){
+    /**
+     * This function returns an orientation vector given an orientation quaternion
+     */
+    Eigen::Quaterniond q;
+    q.x() = orientationQuaternion.x;
+    q.y() = orientationQuaternion.y;
+    q.z() = orientationQuaternion.z;
+    q.w() = orientationQuaternion.w;
+    
+    Eigen::Vector3d initialOrientation;
+    initialOrientation << 0.0, 0.0, 1.0;
+    Eigen::Vector3d directionCosines;
+
+    directionCosines = q * initialOrientation;
+    return directionCosines;
+};
 
 /** TODO 
  * 1. Store the quaternion message - check if it needs to be transformed into anything else or 
