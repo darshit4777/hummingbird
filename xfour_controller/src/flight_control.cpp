@@ -166,6 +166,13 @@ void FlightController::InertialCallback(const sensor_msgs::Imu::ConstPtr& imu){
     m_orientationQuaternionPrevious = m_orientationQuaternion;
     m_orientationQuaternion = imuMessage.orientation;
 
+    Eigen::Quaterniond q;
+    q.x() = m_orientationQuaternion.x;
+    q.y() = m_orientationQuaternion.y;
+    q.z() = m_orientationQuaternion.z;
+    q.w() = m_orientationQuaternion.w;
+
+    m_currentRotationMatrix = q.normalized().toRotationMatrix();
     return;
 };
 
@@ -279,9 +286,20 @@ Eigen::Matrix3d FlightController::GetDesiredRotationMatrix(){
     // TODO : It is still not clear if the usage of the thrust vector with its current sign produces a 
     // correct desired rotation matrix. We would have to fix that at some point.
     desiredRotationMatrix = Eigen::AngleAxis<double>(rotationAngle,rotationAxis);
-    ROS_INFO_STREAM(desiredRotationMatrix);
+    //ROS_INFO_STREAM(desiredRotationMatrix);
 
-    return desiredRotationMatrix;
+    return m_desiredRotationMatrix;
+};
+Eigen::Matrix3d FlightController::GetErrorRotationMatrix(){
+    /**
+     * This function generates an error rotation matrix Rtilda. 
+     * Rtilda = R * Rdtranspose
+     */
+
+    m_errorRotationMatrix = m_currentRotationMatrix * m_desiredRotationMatrix.transpose();
+
+    return m_errorRotationMatrix;
+
 };
 
 Eigen::Vector3d FlightController::GetOrientationVectorFromQuaternion(geometry_msgs::Quaternion orientationQuaternion){
@@ -303,9 +321,11 @@ Eigen::Vector3d FlightController::GetOrientationVectorFromQuaternion(geometry_ms
 };
 
 /** TODO 
- * 1. Store the quaternion message - check if it needs to be transformed into anything else or 
- * if it should remain a quaternion - Assuming things can remain a quaternion - but we may need to convert Rot. 
- * matrices to quaternions for Rd calculation.
+ * 1. Convert the error rotation matrix into an error quaternion.
+ * 2. Write methods for calculating angular velocity derivative and other quantities
+ * 3. Write a method for making skew symmetric matrices out of vectors.
+ * 4. Write a method for calculating Torque
+ * 5. Write a method for calculating motor RPMs out of thrust and torque.
  * 
 */ 
 
