@@ -302,6 +302,16 @@ Eigen::Matrix3d FlightController::GetErrorRotationMatrix(){
 
 };
 
+Eigen::Quaterniond FlightController::GetErrorQuaternion(){
+    /**
+     * This function returns the quaternion form of the error rotation matrix Rtilda
+     * Rtilda = R * Rdtranspose
+     */
+    Eigen::Quaterniond q(m_errorRotationMatrix);
+    m_errorQuaternion = q;
+    return m_errorQuaternion;
+};
+
 Eigen::Vector3d FlightController::GetOrientationVectorFromQuaternion(geometry_msgs::Quaternion orientationQuaternion){
     /**
      * This function returns an orientation vector given an orientation quaternion
@@ -320,12 +330,60 @@ Eigen::Vector3d FlightController::GetOrientationVectorFromQuaternion(geometry_ms
     return directionCosines;
 };
 
+Eigen::Matrix3d GetSkewSymmetricMatrix(Eigen::Vector3d inputVector){
+    /**
+     * This function returns a skew symmetric matrix of an input vector.
+     * For an input vector ux, uy ,uz  The skew symmetric matrix is of the form 
+     * [0 -uz uy]
+     * [uz 0 -ux]
+     * [-uy ux 0]
+     */
+    double ux, uy, uz;
+    ux = inputVector[0];
+    uy = inputVector[1];
+    uz = inputVector[2];
+
+
+
+    Eigen::Matrix3d skewSymmetricMatrix;
+    skewSymmetricMatrix << 0.0,     -uz,        uy,
+                            uz,     0.0,       -ux,
+                           -uy,      ux,       0.0;
+
+    return skewSymmetricMatrix;
+};
+
+Eigen::Vector3d FlightController::GetDesiredAngularVelocity(){
+    /**
+     * This method uses the current rotation matrix and the desired rotation matrix to 
+     * generate a vector of desired angular velocity
+     */
+
+    // Generating an axis angle representation of the error rotation matrix.
+    Eigen::AngleAxisd errorRotationAxisAngle(m_errorRotationMatrix);
+
+    // Differentiating the angle deviation to get the angular velocity.
+    errorRotationAxisAngle.angle() = errorRotationAxisAngle.angle() / m_loopTime;
+
+    double omega_x, omega_y, omega_z; // Angular velocity components
+    omega_x = errorRotationAxisAngle.angle() * errorRotationAxisAngle.axis()[0];
+    omega_y = errorRotationAxisAngle.angle() * errorRotationAxisAngle.axis()[1];
+    omega_z = errorRotationAxisAngle.angle() * errorRotationAxisAngle.axis()[2];
+
+    m_angularVelocityDesired << omega_x, omega_y, omega_z;
+
+    return m_angularVelocityDesired;
+};
 /** TODO 
- * 1. Convert the error rotation matrix into an error quaternion.
+ * 1. Convert the error rotation matrix into an error quaternion. - Done.
  * 2. Write methods for calculating angular velocity derivative and other quantities
- * 3. Write a method for making skew symmetric matrices out of vectors.
+ * 3. Write a method for making skew symmetric matrices out of vectors. - Done
  * 4. Write a method for calculating Torque
  * 5. Write a method for calculating motor RPMs out of thrust and torque.
+ * 6. Test the error quaternion function using the Frobenius norm method.
+ * 7. Write a test to ensure that the skew symmetric matrix is proper visually.
+ * 
+ * Quantities needed for rotational convergence
  * 
 */ 
 
