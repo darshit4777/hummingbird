@@ -33,7 +33,7 @@ FlightController::FlightController(ros::NodeHandle* nodehandle)
     m_motorCommands.motor4 = 0.0;
 
     m_thrust = 0.0;
-    m_torque.setZero();
+    m_torqueVector.setZero();
 
     m_velocityCommanded.setZero();
     m_velocityCommandedPrevious.setZero();
@@ -44,7 +44,7 @@ FlightController::FlightController(ros::NodeHandle* nodehandle)
     m_tuningParams.gamma = 1.0;
     m_tuningParams.k_eta = 1.0;
     m_tuningParams.k_thrust = 1.0;
-    m_tuningParams.sigma = 1.0;
+    m_tuningParams.k_sigma = 1.0;
     m_loopTime = 0.1;
     m_velocityErrorLimit[0] = 2.0;
     m_velocityErrorLimit[1] = 2.0;
@@ -53,7 +53,10 @@ FlightController::FlightController(ros::NodeHandle* nodehandle)
 
 
     // Initializing physical constants
-    m_mass = 1.0; 
+    m_mass = 1.0;
+    m_rotationalInertia << 1.0 , 0.0 , 0.0,
+                           0.0 , 1.0 , 0.0,
+                           0.0 , 0.0 , 1.0; 
     m_g = 9.8134;
 
     _positionSubscriber = _nh.subscribe("/hummingbird/ground_truth/pose",10,&FlightController::PositionCallback,this);
@@ -374,9 +377,70 @@ Eigen::Vector3d FlightController::GetDesiredAngularVelocity(){
 
     return m_angularVelocityDesired;
 };
+
+void FlightController::CalculateTorque(){
+    /** This method uses a non-linear control equation with 11 terms to calculate the 
+     * Torque vector
+     */
+
+    // First Term 
+    Eigen::Vector3d firstTerm;
+    Eigen::Matrix3d skewSymmetricAngularVelocity;
+    skewSymmetricAngularVelocity = GetSkewSymmetricMatrix(m_angularVelocity);
+    Eigen::Matrix3d identity3;
+    identity3.setIdentity();
+    firstTerm = skewSymmetricAngularVelocity * identity3 * m_angularVelocity;
+
+    // Second Term
+    // The second terms involves calculating the gyroscopic torque - we will leave this for now. 
+
+    // Third term
+    //// The derivative of desired angular velocity is calculated as the difference of desired angular vel and the current angular vel.
+    Eigen::Vector3d thirdTerm;
+    thirdTerm = m_rotationalInertia * ((m_angularVelocityDesired - m_angularVelocity) / m_loopTime) / m_tuningParams.gamma;
+
+    // Fourth Term
+    Eigen::Vector3d fourthTerm;
+    Eigen::Vector3d sigma;
+    Eigen::Vector3d angularVelocityError; //< omega tilda
+    angularVelocityError = m_desiredRotationMatrix * (m_angularVelocity - m_angularVelocityDesired);
+    Eigen::Vector3d angularVelocityErrorVirtual; //< omega tilda v
+    Eigen::Vector3d quaternionVector;
+    quaternionVector << m_errorQuaternion.x() , m_errorQuaternion.y() , m_errorQuaternion.z();
+    angularVelocityErrorVirtual = - 2 * m_tuningParams.k_eta * m_errorQuaternion.w() * quaternionVector;
+    sigma = angularVelocityError - angularVelocityErrorVirtual; 
+
+    fourthTerm = - m_rotationalInertia * m_desiredRotationMatrix.transpose() * m_tuningParams.k_sigma * sigma;
+
+    // Fifth Term 
+    Eigen::Vector3d fifthTerm;
+    fifthTerm = - m_rotationalInertia * m_desiredRotationMatrix.transpose() * m_errorQuaternion.w() * quaternionVector / (2 * m_tuningParams.gamma);
+
+    // Sixth Term
+    Eigen::Vector3d sixthTerm;
+    sixthTerm = - m_rotationalInertia * m_desiredRotationMatrix.transpose() * m_tuningParams.k_eta * quaternionVector.transpose() * angularVelocityError * quaternionVector / m_tuningParams.gamma;
+
+
+    // Seventh Term
+    Eigen::Vector3d seventhTerm;
+    seventhTerm = - m_rotationalInertia * m_desiredRotationMatrix.transpose() * m_desiredRotationMatrix * GetSkewSymmetricMatrix(m_angularVelocityDesired) * m_desiredRotationMatrix.transpose() * angularVelocityError / m_tuningParams.gamma;
+
+    // Eigth Term
+    Eigen::Vector3d eigthTerm;
+    eigthTerm = m_rotationalInertia * m_desiredRotationMatrix.transpose() * (m_tuningParams.k_eta * m_errorQuaternion.w() * m_errorQuaternion.w() * identity3 ) * angularVelocityError / m-m_tuningParams.gamma;
+
+    // Ninth Term 
+    Eigen::Vector3d ninthTerm;
+    ninthTerm = m_rotationalInertia * m_desiredRotationMatrix.transpose() * (m_tuningParams.k_eta * m_errorQuaternion.w() * GetSkewSymmetricMatrix(quaternionVector) ) * angularVelocityError / m_tuningParams.gamma;
+    
+}
+
+
+
+
 /** TODO 
  * 1. Convert the error rotation matrix into an error quaternion. - Done.
- * 2. Write methods for calculating angular velocity derivative and other quantities
+ * 2. Write methods for calculating angular velocity derivative - Done 
  * 3. Write a method for making skew symmetric matrices out of vectors. - Done
  * 4. Write a method for calculating Torque
  * 5. Write a method for calculating motor RPMs out of thrust and torque.
