@@ -397,7 +397,7 @@ void FlightController::CalculateTorque(){
     // Third term
     //// The derivative of desired angular velocity is calculated as the difference of desired angular vel and the current angular vel.
     Eigen::Vector3d thirdTerm;
-    thirdTerm = m_rotationalInertia * ((m_angularVelocityDesired - m_angularVelocity) / m_loopTime) / m_tuningParams.gamma;
+    thirdTerm = (m_angularVelocityDesired - m_angularVelocity) / m_loopTime;
 
     // Fourth Term
     Eigen::Vector3d fourthTerm;
@@ -410,30 +410,38 @@ void FlightController::CalculateTorque(){
     angularVelocityErrorVirtual = - 2 * m_tuningParams.k_eta * m_errorQuaternion.w() * quaternionVector;
     sigma = angularVelocityError - angularVelocityErrorVirtual; 
 
-    fourthTerm = - m_rotationalInertia * m_desiredRotationMatrix.transpose() * m_tuningParams.k_sigma * sigma;
+    fourthTerm =  m_tuningParams.k_sigma * sigma;
 
     // Fifth Term 
     Eigen::Vector3d fifthTerm;
-    fifthTerm = - m_rotationalInertia * m_desiredRotationMatrix.transpose() * m_errorQuaternion.w() * quaternionVector / (2 * m_tuningParams.gamma);
+    fifthTerm = m_errorQuaternion.w() * quaternionVector / 2;
 
     // Sixth Term
     Eigen::Vector3d sixthTerm;
-    sixthTerm = - m_rotationalInertia * m_desiredRotationMatrix.transpose() * m_tuningParams.k_eta * quaternionVector.transpose() * angularVelocityError * quaternionVector / m_tuningParams.gamma;
+    sixthTerm = m_tuningParams.k_eta * quaternionVector.transpose() * angularVelocityError * quaternionVector;
 
 
     // Seventh Term
     Eigen::Vector3d seventhTerm;
-    seventhTerm = - m_rotationalInertia * m_desiredRotationMatrix.transpose() * m_desiredRotationMatrix * GetSkewSymmetricMatrix(m_angularVelocityDesired) * m_desiredRotationMatrix.transpose() * angularVelocityError / m_tuningParams.gamma;
+    seventhTerm = m_desiredRotationMatrix * GetSkewSymmetricMatrix(m_angularVelocityDesired) * m_desiredRotationMatrix.transpose();
 
     // Eigth Term
     Eigen::Vector3d eigthTerm;
-    eigthTerm = m_rotationalInertia * m_desiredRotationMatrix.transpose() * (m_tuningParams.k_eta * m_errorQuaternion.w() * m_errorQuaternion.w() * identity3 ) * angularVelocityError / m-m_tuningParams.gamma;
+    eigthTerm = m_tuningParams.k_eta * m_errorQuaternion.w() * m_errorQuaternion.w() * identity3;
 
     // Ninth Term 
     Eigen::Vector3d ninthTerm;
-    ninthTerm = m_rotationalInertia * m_desiredRotationMatrix.transpose() * (m_tuningParams.k_eta * m_errorQuaternion.w() * GetSkewSymmetricMatrix(quaternionVector) ) * angularVelocityError / m_tuningParams.gamma;
+    ninthTerm = m_tuningParams.k_eta * m_errorQuaternion.w() * GetSkewSymmetricMatrix(quaternionVector);
+
+
+    // Final Equation
+    m_torqueVector = firstTerm + (m_rotationalInertia / m_tuningParams.gamma ) * ( thirdTerm + 
+                    m_desiredRotationMatrix.transpose() * (- fourthTerm - fifthTerm + sixthTerm - 
+                    (seventhTerm + eigthTerm + ninthTerm) * angularVelocityError ) );
+
     
-}
+    return;
+};
 
 
 
@@ -442,7 +450,7 @@ void FlightController::CalculateTorque(){
  * 1. Convert the error rotation matrix into an error quaternion. - Done.
  * 2. Write methods for calculating angular velocity derivative - Done 
  * 3. Write a method for making skew symmetric matrices out of vectors. - Done
- * 4. Write a method for calculating Torque
+ * 4. Write a method for calculating Torque - Done 
  * 5. Write a method for calculating motor RPMs out of thrust and torque.
  * 6. Test the error quaternion function using the Frobenius norm method.
  * 7. Write a test to ensure that the skew symmetric matrix is proper visually.
