@@ -59,10 +59,12 @@ public:
     } m_motorCommands;
     
     // Physical Constants
-    double m_motorConstant;                         // Motor constant that relates propeller thrust to motor rpm
+    double m_motorThrustConstant;                   // Motor constant that relates propeller thrust to motor rpm squared    
+    double m_motorTorqueConstant;                   // Motor constant that relates propeller torque to motor rpm squared
     double m_mass;                                  // Mass of the robot
     Eigen::Matrix3d m_rotationalInertia;            // Rotational inerta of the robot. Ixx, Iyy and Izz
     double m_g;     // Acceleration due to gravity
+    double m_propellerOffset;                       // Distance of the propeller from the center of mass
 
     // Controller Related Variables
     struct tuning_constants{
@@ -76,13 +78,14 @@ public:
          
 private:
     // ROS subscribers and publishers
+    
     ros::NodeHandle _nh;
     ros::Subscriber _positionSubscriber;
     ros::Subscriber _inertialSubscriber;
     ros::Subscriber _velocitySubscriber;
     ros::Subscriber _orientationSubscriber;
     ros::Subscriber _commandSubscriber;
-    ros::Publisher _motorCommandPublisher;
+    ros::Publisher motorCommandPublisher;
 
 // Listing all methods
 public:
@@ -95,6 +98,8 @@ void VelocityCallback(const nav_msgs::Odometry::ConstPtr& measuredOdometry);
 void CommandCallback(const xfour_controller::YawVelocity::ConstPtr& commandMessage);
 void CalculateThrust();
 void CalculateTorque();
+void CalculateMotorRPM();
+void CommandMotorRPM();
 Eigen::Matrix3d GetDesiredRotationMatrix();
 Eigen::Matrix3d GetErrorRotationMatrix();
 Eigen::Vector3d GetDesiredAngularVelocity();

@@ -41,30 +41,41 @@ FlightController::FlightController(ros::NodeHandle* nodehandle)
     m_commandedYawPrevious = 0.0;
     
     // Initializing all tunable parameters 
-    m_tuningParams.gamma = 1.0;
-    m_tuningParams.k_eta = 1.0;
-    m_tuningParams.k_thrust = 1.0;
-    m_tuningParams.k_sigma = 1.0;
+    m_tuningParams.gamma = 20000.0;
+    m_tuningParams.k_eta = 2.0;
+    m_tuningParams.k_thrust = 0.01;
+    m_tuningParams.k_sigma = 2.0;
     m_loopTime = 0.1;
-    m_velocityErrorLimit[0] = 2.0;
-    m_velocityErrorLimit[1] = 2.0;
-    m_velocityErrorLimit[2] = 2.0;
+    m_velocityErrorLimit[0] = 0.5;
+    m_velocityErrorLimit[1] = 0.5;
+    m_velocityErrorLimit[2] = 0.5;
 
 
 
-    // Initializing physical constants
-    m_mass = 1.0;
-    m_rotationalInertia << 1.0 , 0.0 , 0.0,
-                           0.0 , 1.0 , 0.0,
-                           0.0 , 0.0 , 1.0; 
+    // Initializing physical constants - these are set for the hummingbird quadcopter
+    m_mass = 0.68;
+    m_rotationalInertia << 0.007 , 0.0 , 0.0,
+                           0.0 , 0.007 , 0.0,
+                           0.0 , 0.0 , 0.012; 
     m_g = 9.8134;
-
+    // Data for a 10x6 Propeller at 1000 rpm, 0 mph. 
+    m_motorThrustConstant = 0.000010008;
+    m_propellerOffset = 0.17;
+    m_motorTorqueConstant = 0.000000261;
+    
     _positionSubscriber = _nh.subscribe("/hummingbird/ground_truth/pose",10,&FlightController::PositionCallback,this);
+    auto positionCheck = ros::topic::waitForMessage<geometry_msgs::Pose>("/hummingbird/ground_truth/pose",this->_nh);
+    
     _inertialSubscriber = _nh.subscribe("/hummingbird/imu",10,&FlightController::InertialCallback,this);
+    auto intertialCheck = ros::topic::waitForMessage<sensor_msgs::Imu>("/hummingbird/imu",this->_nh);
+    
     _velocitySubscriber = _nh.subscribe("/hummingbird/ground_truth/odometry",10,&FlightController::VelocityCallback,this);
+    auto odometryCheck = ros::topic::waitForMessage<nav_msgs::Odometry>("/hummingbird/ground_truth/odometry",this->_nh);
+
+
     _commandSubscriber = _nh.subscribe("/controller_command",10,&FlightController::CommandCallback,this);
 
-    _motorCommandPublisher = _nh.advertise<mav_msgs::Actuators>("/hummingbird/command/motors",10);
+    motorCommandPublisher = _nh.advertise<mav_msgs::Actuators>("/hummingbird/command/motor_speed",10);
 
     return;
 };
@@ -81,13 +92,9 @@ void FlightController::CalculateThrust(){
     // Transforming the velocity commands into the control coordinate system before calculating thrust
     Eigen::Vector3d velocityCommanded, velocityCommandedPrevious;
     velocityCommanded = TransformMeasuredToControlCoordinates(m_velocityCommanded);
-    ROS_INFO("The transformed velocity is ");
-    ROS_INFO_STREAM(velocityCommanded);
-    velocityCommandedPrevious = TransformMeasuredToControlCoordinates(m_velocityCommandedPrevious);
+    velocityCommandedPrevious = TransformMeasuredToControlCoordinates(m_velocity);
 
     velocityCommanded_derivative = (velocityCommanded -  velocityCommandedPrevious)/m_loopTime;
-    ROS_INFO("The velocity derivative is ");
-    ROS_INFO_STREAM(velocityCommanded_derivative);
     velocityCommanded_derivative[2] = velocityCommanded_derivative[2] - m_g;
 
     Eigen::Vector3d saturatedEpsilon;
@@ -174,6 +181,11 @@ void FlightController::InertialCallback(const sensor_msgs::Imu::ConstPtr& imu){
     q.y() = m_orientationQuaternion.y;
     q.z() = m_orientationQuaternion.z;
     q.w() = m_orientationQuaternion.w;
+    geometry_msgs::Quaternion qMeasured;
+    qMeasured.x = q.x();
+    qMeasured.y = q.y();
+    qMeasured.z = q.z();
+    qMeasured.w = q.w();
 
     m_currentRotationMatrix = q.normalized().toRotationMatrix();
     return;
@@ -288,7 +300,7 @@ Eigen::Matrix3d FlightController::GetDesiredRotationMatrix(){
     
     // TODO : It is still not clear if the usage of the thrust vector with its current sign produces a 
     // correct desired rotation matrix. We would have to fix that at some point.
-    desiredRotationMatrix = Eigen::AngleAxis<double>(rotationAngle,rotationAxis);
+    m_desiredRotationMatrix = Eigen::AngleAxis<double>(rotationAngle,rotationAxis);
     //ROS_INFO_STREAM(desiredRotationMatrix);
 
     return m_desiredRotationMatrix;
@@ -333,7 +345,7 @@ Eigen::Vector3d FlightController::GetOrientationVectorFromQuaternion(geometry_ms
     return directionCosines;
 };
 
-Eigen::Matrix3d GetSkewSymmetricMatrix(Eigen::Vector3d inputVector){
+Eigen::Matrix3d FlightController::GetSkewSymmetricMatrix(Eigen::Vector3d inputVector){
     /**
      * This function returns a skew symmetric matrix of an input vector.
      * For an input vector ux, uy ,uz  The skew symmetric matrix is of the form 
@@ -383,13 +395,20 @@ void FlightController::CalculateTorque(){
      * Torque vector
      */
 
+    this->GetDesiredRotationMatrix();
+    this->GetErrorRotationMatrix();
+    this->GetDesiredAngularVelocity();
+    this->GetErrorQuaternion();
+
     // First Term 
     Eigen::Vector3d firstTerm;
     Eigen::Matrix3d skewSymmetricAngularVelocity;
-    skewSymmetricAngularVelocity = GetSkewSymmetricMatrix(m_angularVelocity);
+    skewSymmetricAngularVelocity = this->GetSkewSymmetricMatrix(m_angularVelocity);
     Eigen::Matrix3d identity3;
     identity3.setIdentity();
     firstTerm = skewSymmetricAngularVelocity * identity3 * m_angularVelocity;
+    //ROS_INFO("The first term is ");
+    //ROS_INFO_STREAM(firstTerm);
 
     // Second Term
     // The second terms involves calculating the gyroscopic torque - we will leave this for now. 
@@ -398,59 +417,151 @@ void FlightController::CalculateTorque(){
     //// The derivative of desired angular velocity is calculated as the difference of desired angular vel and the current angular vel.
     Eigen::Vector3d thirdTerm;
     thirdTerm = (m_angularVelocityDesired - m_angularVelocity) / m_loopTime;
-
+    //ROS_INFO("The third term is ");
+    //ROS_INFO_STREAM(thirdTerm);
+    
     // Fourth Term
     Eigen::Vector3d fourthTerm;
     Eigen::Vector3d sigma;
     Eigen::Vector3d angularVelocityError; //< omega tilda
-    angularVelocityError = m_desiredRotationMatrix * (m_angularVelocity - m_angularVelocityDesired);
     Eigen::Vector3d angularVelocityErrorVirtual; //< omega tilda v
     Eigen::Vector3d quaternionVector;
+    
+    
+    angularVelocityError = m_desiredRotationMatrix * (m_angularVelocity - m_angularVelocityDesired);
     quaternionVector << m_errorQuaternion.x() , m_errorQuaternion.y() , m_errorQuaternion.z();
     angularVelocityErrorVirtual = - 2 * m_tuningParams.k_eta * m_errorQuaternion.w() * quaternionVector;
     sigma = angularVelocityError - angularVelocityErrorVirtual; 
 
     fourthTerm =  m_tuningParams.k_sigma * sigma;
-
+    //ROS_INFO("The fourth term is ");
+    //ROS_INFO_STREAM(fourthTerm);
     // Fifth Term 
     Eigen::Vector3d fifthTerm;
     fifthTerm = m_errorQuaternion.w() * quaternionVector / 2;
-
-    // Sixth Term
+    //ROS_INFO("The fifth term is ");
+    //ROS_INFO_STREAM(fifthTerm);
+    // Sixth Term`
     Eigen::Vector3d sixthTerm;
     sixthTerm = m_tuningParams.k_eta * quaternionVector.transpose() * angularVelocityError * quaternionVector;
-
+    //ROS_INFO("The sixth term is ");
+    //ROS_INFO_STREAM(sixthTerm);
 
     // Seventh Term
-    Eigen::Vector3d seventhTerm;
-    seventhTerm = m_desiredRotationMatrix * GetSkewSymmetricMatrix(m_angularVelocityDesired) * m_desiredRotationMatrix.transpose();
-
+    Eigen::Matrix3d seventhTerm;
+    seventhTerm = m_desiredRotationMatrix * this->GetSkewSymmetricMatrix(m_angularVelocityDesired) * m_desiredRotationMatrix.transpose();
+    //ROS_INFO("The seventh term is ");
+    //ROS_INFO_STREAM(seventhTerm);
     // Eigth Term
-    Eigen::Vector3d eigthTerm;
-    eigthTerm = m_tuningParams.k_eta * m_errorQuaternion.w() * m_errorQuaternion.w() * identity3;
-
+    Eigen::Matrix3d eightTerm;
+    eightTerm = m_tuningParams.k_eta * m_errorQuaternion.w() * m_errorQuaternion.w() * identity3;
+    //ROS_INFO("The eighth term is ");
+    //ROS_INFO_STREAM(eightTerm);
     // Ninth Term 
-    Eigen::Vector3d ninthTerm;
-    ninthTerm = m_tuningParams.k_eta * m_errorQuaternion.w() * GetSkewSymmetricMatrix(quaternionVector);
-
-
+    Eigen::Matrix3d ninthTerm;
+    ninthTerm = m_tuningParams.k_eta * m_errorQuaternion.w() * this->GetSkewSymmetricMatrix(quaternionVector);
+    //ROS_INFO("The ninth term is ");
+    //ROS_INFO_STREAM(ninthTerm);
+    Eigen::Vector3d tenthTerm;
+    tenthTerm = (seventhTerm + eightTerm + ninthTerm) * angularVelocityError;
+    //ROS_INFO("The tenth term is ");
+    //ROS_INFO_STREAM(tenthTerm);
     // Final Equation
     m_torqueVector = firstTerm + (m_rotationalInertia / m_tuningParams.gamma ) * ( thirdTerm + 
                     m_desiredRotationMatrix.transpose() * (- fourthTerm - fifthTerm + sixthTerm - 
-                    (seventhTerm + eigthTerm + ninthTerm) * angularVelocityError ) );
+                     tenthTerm) );
 
     
     return;
 };
 
+void FlightController::CalculateMotorRPM(){
+    /**
+     * Use the torque vector and the thrust value to calculate the motor rpms
+     * The method of doing so is simple least squares solving of an equation 
+     * A X = B
+     */
 
+    // TODO : Verify the units of thrust and torque constants
+    // TODO : Make sure you actually command rad/s and not rpm
+    Eigen::Matrix4d A;
+    double b , d , k;
+    b = m_motorThrustConstant;
+    d = m_propellerOffset;
+    k = m_motorTorqueConstant;
+    A << b , b , b , b ,
+         0 ,d*b, 0 ,-d*b,
+         d*b, 0 ,-d*b, 0 ,
+         -k , k , -k , k ;
+    
+    Eigen::Vector4d B;
+    B[0] = m_thrust;
+    B[1] = m_torqueVector[0];
+    B[2] = m_torqueVector[1];
+    B[3] = m_torqueVector[2];
+    //ROS_INFO_STREAM("The torque vector is ");
+    //ROS_INFO_STREAM(m_torqueVector);
+    Eigen::Vector4d X;
+    X = A.colPivHouseholderQr().solve(B);
+    m_motorCommands.motor1 = std::sqrt(X[0]);
+    m_motorCommands.motor2 = std::sqrt(X[1]);
+    m_motorCommands.motor3 = std::sqrt(X[2]);
+    m_motorCommands.motor4 = std::sqrt(X[3]);
+
+    if ( std::isnan(m_motorCommands.motor1) || std::isnan(m_motorCommands.motor2) || std::isnan(m_motorCommands.motor3) || std::isnan(m_motorCommands.motor4)){
+        ROS_WARN("Invalid motor command ");
+        return;
+    };
+    
+    m_motorCommands.motor1 = std::min(m_motorCommands.motor1,1256.0);
+    m_motorCommands.motor2 = std::min(m_motorCommands.motor2,1256.0);
+    m_motorCommands.motor3 = std::min(m_motorCommands.motor3,1256.0);
+    m_motorCommands.motor4 = std::min(m_motorCommands.motor4,1256.0);
+
+    m_motorCommands.motor1 = std::max(m_motorCommands.motor1,0.0);
+    m_motorCommands.motor2 = std::max(m_motorCommands.motor2,0.0);
+    m_motorCommands.motor3 = std::max(m_motorCommands.motor3,0.0);
+    m_motorCommands.motor4 = std::max(m_motorCommands.motor4,0.0);
+
+    return;  
+}
+
+void FlightController::CommandMotorRPM(){
+    /** 
+     * This function is used to publish the current motor rpms
+     */
+    mav_msgs::ActuatorsPtr rpmCommand(new mav_msgs::Actuators);
+    ROS_INFO_STREAM("Motor Commands");
+    ROS_INFO_STREAM(m_motorCommands.motor1);
+    ROS_INFO_STREAM(m_motorCommands.motor2);
+    ROS_INFO_STREAM(m_motorCommands.motor3);
+    ROS_INFO_STREAM(m_motorCommands.motor4);
+    
+    if ( std::isnan(m_motorCommands.motor1) || std::isnan(m_motorCommands.motor2) || std::isnan(m_motorCommands.motor3) || std::isnan(m_motorCommands.motor4)){
+        ROS_WARN("Invalid motor command ");
+        return;
+    };
+    //m_motorCommands.motor1 = 0.0;
+    //m_motorCommands.motor2 = 0.0;
+    //m_motorCommands.motor3 = 0.0;
+    //m_motorCommands.motor4 = 0.0;
+    
+
+    rpmCommand->angular_velocities.clear();
+    rpmCommand->angular_velocities.push_back(m_motorCommands.motor1);
+    rpmCommand->angular_velocities.push_back(m_motorCommands.motor2);
+    rpmCommand->angular_velocities.push_back(m_motorCommands.motor3);
+    rpmCommand->angular_velocities.push_back(m_motorCommands.motor4);
+    rpmCommand->header.stamp = ros::Time::now();
+
+    motorCommandPublisher.publish(rpmCommand);
+
+    return;
+}
 
 
 /** TODO 
- * 1. Convert the error rotation matrix into an error quaternion. - Done.
- * 2. Write methods for calculating angular velocity derivative - Done 
- * 3. Write a method for making skew symmetric matrices out of vectors. - Done
- * 4. Write a method for calculating Torque - Done 
+ * 1. Calculate the gyroscopic torque
  * 5. Write a method for calculating motor RPMs out of thrust and torque.
  * 6. Test the error quaternion function using the Frobenius norm method.
  * 7. Write a test to ensure that the skew symmetric matrix is proper visually.
@@ -466,9 +577,16 @@ int main(int argc, char **argv){
     ros::init(argc,argv,"flight_control");
     ros::NodeHandle nh;
     FlightController HummingBirdController(&nh);
+    ros::Rate r(10);
     while(ros::ok()){
         HummingBirdController.CalculateThrust();
+        HummingBirdController.CalculateTorque();
+        HummingBirdController.CalculateMotorRPM();
+        HummingBirdController.CommandMotorRPM();
         ROS_INFO("The commanded thrust is %f",HummingBirdController.m_thrust);
+        ROS_INFO_STREAM("The commanded torque vector is ");
+        ROS_INFO_STREAM(HummingBirdController.m_torqueVector);
+        r.sleep();
         ros::spinOnce();    
     };
     
