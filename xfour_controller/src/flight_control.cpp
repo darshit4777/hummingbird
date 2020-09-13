@@ -41,14 +41,14 @@ FlightController::FlightController(ros::NodeHandle* nodehandle)
     m_commandedYawPrevious = 0.0;
     
     // Initializing all tunable parameters 
-    m_tuningParams.gamma = 20000.0;
+    m_tuningParams.gamma = 20.0;
     m_tuningParams.k_eta = 2.0;
     m_tuningParams.k_thrust = 0.01;
     m_tuningParams.k_sigma = 2.0;
     m_loopTime = 0.1;
-    m_velocityErrorLimit[0] = 0.5;
-    m_velocityErrorLimit[1] = 0.5;
-    m_velocityErrorLimit[2] = 0.5;
+    m_velocityErrorLimit[0] = 0.1;
+    m_velocityErrorLimit[1] = 0.1;
+    m_velocityErrorLimit[2] = 0.1;
 
 
 
@@ -59,7 +59,7 @@ FlightController::FlightController(ros::NodeHandle* nodehandle)
                            0.0 , 0.0 , 0.012; 
     m_g = 9.8134;
     // Data for a 10x6 Propeller at 1000 rpm, 0 mph. 
-    m_motorThrustConstant = 0.000010008;
+    m_motorThrustConstant = 0.000009008; //0.000010008;
     m_propellerOffset = 0.17;
     m_motorTorqueConstant = 0.000000261;
     
@@ -93,15 +93,20 @@ void FlightController::CalculateThrust(){
     Eigen::Vector3d velocityCommanded, velocityCommandedPrevious;
     velocityCommanded = TransformMeasuredToControlCoordinates(m_velocityCommanded);
     velocityCommandedPrevious = TransformMeasuredToControlCoordinates(m_velocity);
-
+    ROS_INFO_STREAM("Velocity Error");  
+    ROS_INFO_STREAM(velocityCommanded - velocityCommandedPrevious);
     velocityCommanded_derivative = (velocityCommanded -  velocityCommandedPrevious)/m_loopTime;
     velocityCommanded_derivative[2] = velocityCommanded_derivative[2] - m_g;
+    //ROS_INFO_STREAM("Velocity Commanded Derivative");
+    //ROS_INFO_STREAM(velocityCommanded_derivative);
+    //ROS_INFO_STREAM("Velocity");
+    //ROS_INFO_STREAM(m_velocity);
+
 
     Eigen::Vector3d saturatedEpsilon;
     // Transforming velocity to the control coordinates before calculating Epsilon
     Eigen::Vector3d velocity = TransformMeasuredToControlCoordinates(m_velocity);
     saturatedEpsilon = CaclulateSaturationEpsilon(velocity,velocityCommanded);
-    
     
     m_thrustVector = -m_mass*velocityCommanded_derivative + m_tuningParams.k_thrust * saturatedEpsilon;
     
@@ -151,7 +156,7 @@ Eigen::Vector3d FlightController::CaclulateSaturationEpsilon(Eigen::Vector3d vel
     {
         epsilon[2] = std::min(epsilon[2],m_velocityErrorLimit[2]);
     };
-    ROS_INFO("The value of epsilon is ");
+    ROS_INFO("The value of saturation epsilon is ");
     ROS_INFO_STREAM(epsilon);
     return epsilon;
         
@@ -261,6 +266,12 @@ Eigen::Vector3d FlightController::GetAxisForDesiredRotation(Eigen::Vector3d firs
 
     Eigen::Vector3d rotationAxis;
     rotationAxis = firstVector.cross(secondVector);
+    
+    //if ( (fabs(rotationAxis[0]) < 0.0001) && (fabs(rotationAxis[1]) < 0.0001) && (fabs(rotationAxis[2]) < 0.0001) ){
+    //    rotationAxis << 0.0 , 0.0 , 1.0;
+    //};
+
+
     return rotationAxis;
 };
 
@@ -271,7 +282,7 @@ double FlightController::GetAngleForDesiredRotation(Eigen::Vector3d firstVector,
      */
     
     double rotationAngle;
-    rotationAngle = firstVector.dot(secondVector);
+    rotationAngle = std::acos(firstVector.dot(secondVector));
     return rotationAngle;
 };
 
@@ -284,6 +295,7 @@ Eigen::Matrix3d FlightController::GetDesiredRotationMatrix(){
     Eigen::Matrix3d desiredRotationMatrix;
     Eigen::Vector3d normalizedThrustVector, orientationVector;
     normalizedThrustVector = m_thrustVector.normalized();
+    
     orientationVector = GetOrientationVectorFromQuaternion(m_orientationQuaternion);
     
     /**
@@ -297,7 +309,11 @@ Eigen::Matrix3d FlightController::GetDesiredRotationMatrix(){
     Eigen::Vector3d rotationAxis;
     rotationAngle = GetAngleForDesiredRotation(initialOrientation,normalizedThrustVector);
     rotationAxis = GetAxisForDesiredRotation(initialOrientation,normalizedThrustVector);
+    ROS_INFO_STREAM("This is the rotation angle");
+    ROS_INFO_STREAM(rotationAngle);
     
+    ROS_INFO_STREAM("This is the rotation axis");
+    ROS_INFO_STREAM(rotationAxis);
     // TODO : It is still not clear if the usage of the thrust vector with its current sign produces a 
     // correct desired rotation matrix. We would have to fix that at some point.
     m_desiredRotationMatrix = Eigen::AngleAxis<double>(rotationAngle,rotationAxis);
@@ -399,6 +415,10 @@ void FlightController::CalculateTorque(){
     this->GetErrorRotationMatrix();
     this->GetDesiredAngularVelocity();
     this->GetErrorQuaternion();
+    ROS_INFO_STREAM("The desired Rotation Matrix is ");
+    ROS_INFO_STREAM(m_desiredRotationMatrix);
+    ROS_INFO_STREAM("The desired angular velocity is ");
+    ROS_INFO_STREAM(m_angularVelocityDesired);
 
     // First Term 
     Eigen::Vector3d firstTerm;
@@ -513,10 +533,10 @@ void FlightController::CalculateMotorRPM(){
         return;
     };
     
-    m_motorCommands.motor1 = std::min(m_motorCommands.motor1,1256.0);
-    m_motorCommands.motor2 = std::min(m_motorCommands.motor2,1256.0);
-    m_motorCommands.motor3 = std::min(m_motorCommands.motor3,1256.0);
-    m_motorCommands.motor4 = std::min(m_motorCommands.motor4,1256.0);
+    m_motorCommands.motor1 = std::min(m_motorCommands.motor1,480.0);
+    m_motorCommands.motor2 = std::min(m_motorCommands.motor2,480.0);
+    m_motorCommands.motor3 = std::min(m_motorCommands.motor3,480.0);
+    m_motorCommands.motor4 = std::min(m_motorCommands.motor4,480.0);
 
     m_motorCommands.motor1 = std::max(m_motorCommands.motor1,0.0);
     m_motorCommands.motor2 = std::max(m_motorCommands.motor2,0.0);
@@ -531,11 +551,11 @@ void FlightController::CommandMotorRPM(){
      * This function is used to publish the current motor rpms
      */
     mav_msgs::ActuatorsPtr rpmCommand(new mav_msgs::Actuators);
-    ROS_INFO_STREAM("Motor Commands");
-    ROS_INFO_STREAM(m_motorCommands.motor1);
-    ROS_INFO_STREAM(m_motorCommands.motor2);
-    ROS_INFO_STREAM(m_motorCommands.motor3);
-    ROS_INFO_STREAM(m_motorCommands.motor4);
+    //ROS_INFO_STREAM("Motor Commands");
+    //ROS_INFO_STREAM(m_motorCommands.motor1);
+    //ROS_INFO_STREAM(m_motorCommands.motor2);
+    //ROS_INFO_STREAM(m_motorCommands.motor3);
+    //ROS_INFO_STREAM(m_motorCommands.motor4);
     
     if ( std::isnan(m_motorCommands.motor1) || std::isnan(m_motorCommands.motor2) || std::isnan(m_motorCommands.motor3) || std::isnan(m_motorCommands.motor4)){
         ROS_WARN("Invalid motor command ");
