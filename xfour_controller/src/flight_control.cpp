@@ -43,12 +43,12 @@ FlightController::FlightController(ros::NodeHandle* nodehandle)
     // Initializing all tunable parameters 
     m_tuningParams.gamma = 20.0;
     m_tuningParams.k_eta = 0.01;
-    m_tuningParams.k_thrust = 0.01;
+    m_tuningParams.k_thrust = 0.001;
     m_tuningParams.k_sigma = 0.01;
     m_loopTime = 0.1;
-    m_velocityErrorLimit[0] = 0.3;
-    m_velocityErrorLimit[1] = 0.3;
-    m_velocityErrorLimit[2] = 0.3;
+    m_velocityErrorLimit[0] = 0.1;
+    m_velocityErrorLimit[1] = 0.1;
+    m_velocityErrorLimit[2] = 0.2;
 
 
 
@@ -90,33 +90,61 @@ void FlightController::CalculateThrust(){
 
     Eigen::Vector3d velocityCommanded_derivative;
     // Transforming the velocity commands into the control coordinate system before calculating thrust
-    Eigen::Vector3d velocityCommanded, velocityCommandedPrevious;
+    Eigen::Vector3d velocityCommanded, velocityCommandedPrevious, velocityError;
     velocityCommanded = TransformMeasuredToControlCoordinates(m_velocityCommanded);
     velocityCommandedPrevious = TransformMeasuredToControlCoordinates(m_velocity);
+    velocityError = velocityCommanded - velocityCommandedPrevious;
+
+    velocityError[0] = std::max(velocityError[0],-0.15);
+    velocityError[0] = std::min(velocityError[0],0.15);
+
+    velocityError[1] = std::max(velocityError[1],-0.15);
+    velocityError[1] = std::min(velocityError[1],0.15);
+    
+    velocityError[2] = std::max(velocityError[2],-0.15);
+    velocityError[2] = std::min(velocityError[2],0.15);
+    
+    
+    
+    if ( (velocityError[0] < 0.1 ) && (velocityError[0] > -0.1) ){
+        velocityError[0] = 0.0;
+    };
+
+    if ( (velocityError[1] < 0.1 ) && (velocityError[1] > -0.1) ){
+        velocityError[1] = 0.0;
+    };
+
+    if ( (velocityError[2] < 0.1 ) && (velocityError[2] > -0.1) ){
+        velocityError[2] = 0.0;
+    };
+
+    
+
+
     ROS_INFO_STREAM("Velocity Error");  
-    ROS_INFO_STREAM(velocityCommanded - velocityCommandedPrevious);
-    velocityCommanded_derivative = (velocityCommanded -  velocityCommandedPrevious)/m_loopTime;
+    ROS_INFO_STREAM(velocityError);
+    velocityCommanded_derivative = (velocityError)/m_loopTime;
     velocityCommanded_derivative[2] = velocityCommanded_derivative[2] - m_g;
-    //ROS_INFO_STREAM("Velocity Commanded Derivative");
-    //ROS_INFO_STREAM(velocityCommanded_derivative);
-    //ROS_INFO_STREAM("Velocity");
-    //ROS_INFO_STREAM(m_velocity);
+    
 
 
     Eigen::Vector3d saturatedEpsilon;
     // Transforming velocity to the control coordinates before calculating Epsilon
-    Eigen::Vector3d velocity = TransformMeasuredToControlCoordinates(m_velocity);
-    saturatedEpsilon = CaclulateSaturationEpsilon(velocity,velocityCommanded);
-    
+    saturatedEpsilon = CaclulateSaturationEpsilon(velocityCommandedPrevious,velocityCommanded);
+    ROS_INFO_STREAM("Velocity Derivative Term");
+    ROS_INFO_STREAM(-m_mass*velocityCommanded_derivative);
+
+    //ROS_INFO_STREAM("Saturated Control Term");
+    //ROS_INFO_STREAM(m_tuningParams.k_thrust * saturatedEpsilon);
     m_thrustVector = -m_mass*velocityCommanded_derivative + m_tuningParams.k_thrust * saturatedEpsilon;
-    
+        
     // TODO : The sign of the thrust vector doesnt make sense right now - it should have a negative Z component.
     // Let's leave it be for now - we can figure it out later. Therefore a transformation back to measured coordinates,
     // is not needed right now. The sign of thrust may be accounted for elsewhere.
     //thrustVector = TransformControlToMeasuredCoordinates(thrustVector);
     
-    ROS_INFO_STREAM("The thrust vector is ..");
-    ROS_INFO_STREAM(m_thrustVector);    
+    //ROS_INFO_STREAM("The thrust vector is ..");
+    //ROS_INFO_STREAM(m_thrustVector);    
     m_thrust = std::sqrt(m_thrustVector.squaredNorm());
     
     return; 
@@ -156,8 +184,8 @@ Eigen::Vector3d FlightController::CaclulateSaturationEpsilon(Eigen::Vector3d vel
     {
         epsilon[2] = std::min(epsilon[2],m_velocityErrorLimit[2]);
     };
-    ROS_INFO("The value of saturation epsilon is ");
-    ROS_INFO_STREAM(epsilon);
+    //ROS_INFO("The value of saturation epsilon is ");
+    //ROS_INFO_STREAM(epsilon);
     return epsilon;
         
 }
@@ -296,6 +324,8 @@ Eigen::Matrix3d FlightController::GetDesiredRotationMatrix(){
     Eigen::Matrix3d desiredRotationMatrix;
     Eigen::Vector3d normalizedThrustVector, orientationVector;
     normalizedThrustVector = m_thrustVector.normalized();
+    ROS_INFO_STREAM("Normalized thrust vector");
+    ROS_INFO_STREAM(normalizedThrustVector);
     
     orientationVector = GetOrientationVectorFromQuaternion(m_orientationQuaternion);
     
@@ -411,12 +441,12 @@ Eigen::Vector3d FlightController::GetDesiredAngularVelocity(){
     Eigen::AngleAxisd errorRotationAxisAngle(m_errorRotationMatrix);
     
     // Differentiating the angle deviation to get the angular velocity
-    ROS_INFO_STREAM("The error angle is ");
-    ROS_INFO_STREAM(errorRotationAxisAngle.angle());
+    //ROS_INFO_STREAM("The error angle is ");
+    //ROS_INFO_STREAM(errorRotationAxisAngle.angle());
     
     errorRotationAxisAngle.angle() = errorRotationAxisAngle.angle() / m_loopTime;
-    ROS_INFO_STREAM("The error Axis is ");
-    ROS_INFO_STREAM(errorRotationAxisAngle.axis());
+    //ROS_INFO_STREAM("The error Axis is ");
+    //ROS_INFO_STREAM(errorRotationAxisAngle.axis());
     
 
     double omega_x, omega_y, omega_z; // Angular velocity components
@@ -436,10 +466,6 @@ Eigen::Vector3d FlightController::GetDesiredAngularVelocity(){
     
     m_angularVelocityDesired << -omega_x, omega_y, omega_z;
 
-
-
-
-
     return m_angularVelocityDesired;
 };
 
@@ -453,9 +479,6 @@ void FlightController::CalculateTorque(){
     this->GetDesiredAngularVelocity();
     this->GetErrorQuaternion();
 
-    ROS_INFO_STREAM("The desired angular velocity is ");
-    ROS_INFO_STREAM(m_angularVelocityDesired);
-
     // First Term 
     Eigen::Vector3d firstTerm;
     Eigen::Matrix3d skewSymmetricAngularVelocity;
@@ -463,8 +486,6 @@ void FlightController::CalculateTorque(){
     Eigen::Matrix3d identity3;
     identity3.setIdentity();
     firstTerm = skewSymmetricAngularVelocity * identity3 * m_angularVelocity;
-    //ROS_INFO("The first term is ");
-    //ROS_INFO_STREAM(firstTerm);
 
     // Second Term
     // The second terms involves calculating the gyroscopic torque - we will leave this for now. 
@@ -473,8 +494,6 @@ void FlightController::CalculateTorque(){
     //// The derivative of desired angular velocity is calculated as the difference of desired angular vel and the current angular vel.
     Eigen::Vector3d thirdTerm;
     thirdTerm = (m_angularVelocityDesired - m_angularVelocity) / m_loopTime;
-    //ROS_INFO("The third term is ");
-    //ROS_INFO_STREAM(thirdTerm);
     
     // Fourth Term
     Eigen::Vector3d fourthTerm;
@@ -490,38 +509,31 @@ void FlightController::CalculateTorque(){
     sigma = angularVelocityError - angularVelocityErrorVirtual; 
 
     fourthTerm =  m_tuningParams.k_sigma * sigma;
-    //ROS_INFO("The fourth term is ");
-    //ROS_INFO_STREAM(fourthTerm);
+    
     // Fifth Term 
     Eigen::Vector3d fifthTerm;
     fifthTerm = m_errorQuaternion.w() * quaternionVector / 2;
-    //ROS_INFO("The fifth term is ");
-    //ROS_INFO_STREAM(fifthTerm);
+
     // Sixth Term`
     Eigen::Vector3d sixthTerm;
     sixthTerm = m_tuningParams.k_eta * quaternionVector.transpose() * angularVelocityError * quaternionVector;
-    //ROS_INFO("The sixth term is ");
-    //ROS_INFO_STREAM(sixthTerm);
 
     // Seventh Term
     Eigen::Matrix3d seventhTerm;
     seventhTerm = m_desiredRotationMatrix * this->GetSkewSymmetricMatrix(m_angularVelocityDesired) * m_desiredRotationMatrix.transpose();
-    //ROS_INFO("The seventh term is ");
-    //ROS_INFO_STREAM(seventhTerm);
+    
     // Eigth Term
     Eigen::Matrix3d eightTerm;
     eightTerm = m_tuningParams.k_eta * m_errorQuaternion.w() * m_errorQuaternion.w() * identity3;
-    //ROS_INFO("The eighth term is ");
-    //ROS_INFO_STREAM(eightTerm);
+    
     // Ninth Term 
     Eigen::Matrix3d ninthTerm;
     ninthTerm = m_tuningParams.k_eta * m_errorQuaternion.w() * this->GetSkewSymmetricMatrix(quaternionVector);
-    //ROS_INFO("The ninth term is ");
-    //ROS_INFO_STREAM(ninthTerm);
+    
+    
     Eigen::Vector3d tenthTerm;
     tenthTerm = (seventhTerm + eightTerm + ninthTerm) * angularVelocityError;
-    //ROS_INFO("The tenth term is ");
-    //ROS_INFO_STREAM(tenthTerm);
+    
     // Final Equation
     m_torqueVector = firstTerm + (m_rotationalInertia / m_tuningParams.gamma ) * ( thirdTerm + 
                     m_desiredRotationMatrix.transpose() * (- fourthTerm - fifthTerm + sixthTerm - 
@@ -569,10 +581,10 @@ void FlightController::CalculateMotorRPM(){
         return;
     };
     
-    m_motorCommands.motor1 = std::min(m_motorCommands.motor1,480.0);
-    m_motorCommands.motor2 = std::min(m_motorCommands.motor2,480.0);
-    m_motorCommands.motor3 = std::min(m_motorCommands.motor3,480.0);
-    m_motorCommands.motor4 = std::min(m_motorCommands.motor4,480.0);
+    m_motorCommands.motor1 = std::min(m_motorCommands.motor1,1256.0);
+    m_motorCommands.motor2 = std::min(m_motorCommands.motor2,1256.0);
+    m_motorCommands.motor3 = std::min(m_motorCommands.motor3,1256.0);
+    m_motorCommands.motor4 = std::min(m_motorCommands.motor4,1256.0);
 
     m_motorCommands.motor1 = std::max(m_motorCommands.motor1,0.0);
     m_motorCommands.motor2 = std::max(m_motorCommands.motor2,0.0);
@@ -587,22 +599,11 @@ void FlightController::CommandMotorRPM(){
      * This function is used to publish the current motor rpms
      */
     mav_msgs::ActuatorsPtr rpmCommand(new mav_msgs::Actuators);
-    //ROS_INFO_STREAM("Motor Commands");
-    //ROS_INFO_STREAM(m_motorCommands.motor1);
-    //ROS_INFO_STREAM(m_motorCommands.motor2);
-    //ROS_INFO_STREAM(m_motorCommands.motor3);
-    //ROS_INFO_STREAM(m_motorCommands.motor4);
-    
     if ( std::isnan(m_motorCommands.motor1) || std::isnan(m_motorCommands.motor2) || std::isnan(m_motorCommands.motor3) || std::isnan(m_motorCommands.motor4)){
         ROS_WARN("Invalid motor command ");
         return;
     };
-    //m_motorCommands.motor1 = 0.0;
-    //m_motorCommands.motor2 = 0.0;
-    //m_motorCommands.motor3 = 0.0;
-    //m_motorCommands.motor4 = 0.0;
     
-
     rpmCommand->angular_velocities.clear();
     rpmCommand->angular_velocities.push_back(m_motorCommands.motor1);
     rpmCommand->angular_velocities.push_back(m_motorCommands.motor2);
