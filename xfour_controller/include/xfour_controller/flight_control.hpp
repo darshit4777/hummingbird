@@ -100,6 +100,7 @@ void CalculateThrust();
 void CalculateTorque();
 void CalculateMotorRPM();
 void CommandMotorRPM();
+double NormalizeAngle(double angle);
 Eigen::Matrix3d GetDesiredRotationMatrix();
 Eigen::Matrix3d GetErrorRotationMatrix();
 Eigen::Vector3d GetDesiredAngularVelocity();

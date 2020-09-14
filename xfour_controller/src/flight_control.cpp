@@ -42,13 +42,13 @@ FlightController::FlightController(ros::NodeHandle* nodehandle)
     
     // Initializing all tunable parameters 
     m_tuningParams.gamma = 20.0;
-    m_tuningParams.k_eta = 2.0;
+    m_tuningParams.k_eta = 0.01;
     m_tuningParams.k_thrust = 0.01;
-    m_tuningParams.k_sigma = 2.0;
+    m_tuningParams.k_sigma = 0.01;
     m_loopTime = 0.1;
-    m_velocityErrorLimit[0] = 0.1;
-    m_velocityErrorLimit[1] = 0.1;
-    m_velocityErrorLimit[2] = 0.1;
+    m_velocityErrorLimit[0] = 0.3;
+    m_velocityErrorLimit[1] = 0.3;
+    m_velocityErrorLimit[2] = 0.3;
 
 
 
@@ -193,6 +193,7 @@ void FlightController::InertialCallback(const sensor_msgs::Imu::ConstPtr& imu){
     qMeasured.w = q.w();
 
     m_currentRotationMatrix = q.normalized().toRotationMatrix();
+
     return;
 };
 
@@ -309,11 +310,7 @@ Eigen::Matrix3d FlightController::GetDesiredRotationMatrix(){
     Eigen::Vector3d rotationAxis;
     rotationAngle = GetAngleForDesiredRotation(initialOrientation,normalizedThrustVector);
     rotationAxis = GetAxisForDesiredRotation(initialOrientation,normalizedThrustVector);
-    ROS_INFO_STREAM("This is the rotation angle");
-    ROS_INFO_STREAM(rotationAngle);
-    
-    ROS_INFO_STREAM("This is the rotation axis");
-    ROS_INFO_STREAM(rotationAxis);
+
     // TODO : It is still not clear if the usage of the thrust vector with its current sign produces a 
     // correct desired rotation matrix. We would have to fix that at some point.
     m_desiredRotationMatrix = Eigen::AngleAxis<double>(rotationAngle,rotationAxis);
@@ -326,9 +323,9 @@ Eigen::Matrix3d FlightController::GetErrorRotationMatrix(){
      * This function generates an error rotation matrix Rtilda. 
      * Rtilda = R * Rdtranspose
      */
-
-    m_errorRotationMatrix = m_currentRotationMatrix * m_desiredRotationMatrix.transpose();
-
+    Eigen::Matrix3d m_desiredRotationMatrixTransposed = m_desiredRotationMatrix.transpose(); 
+    m_errorRotationMatrix = m_currentRotationMatrix * m_desiredRotationMatrixTransposed;
+    
     return m_errorRotationMatrix;
 
 };
@@ -384,6 +381,26 @@ Eigen::Matrix3d FlightController::GetSkewSymmetricMatrix(Eigen::Vector3d inputVe
     return skewSymmetricMatrix;
 };
 
+double FlightController::NormalizeAngle(double angle){
+    
+    double tanAngle = std::tan(angle);
+    double angleNormalized;
+    if (angle > 0.0){
+        angleNormalized = std::atan2(tanAngle,1.0);
+    }
+    else if (angle < 0.0)
+    {
+        angleNormalized = std::atan2(tanAngle,-1.0);
+    }
+    else
+    {
+        return 0.0;
+    };
+
+    return angleNormalized;
+
+};
+
 Eigen::Vector3d FlightController::GetDesiredAngularVelocity(){
     /**
      * This method uses the current rotation matrix and the desired rotation matrix to 
@@ -392,16 +409,36 @@ Eigen::Vector3d FlightController::GetDesiredAngularVelocity(){
 
     // Generating an axis angle representation of the error rotation matrix.
     Eigen::AngleAxisd errorRotationAxisAngle(m_errorRotationMatrix);
-
-    // Differentiating the angle deviation to get the angular velocity.
+    
+    // Differentiating the angle deviation to get the angular velocity
+    ROS_INFO_STREAM("The error angle is ");
+    ROS_INFO_STREAM(errorRotationAxisAngle.angle());
+    
     errorRotationAxisAngle.angle() = errorRotationAxisAngle.angle() / m_loopTime;
+    ROS_INFO_STREAM("The error Axis is ");
+    ROS_INFO_STREAM(errorRotationAxisAngle.axis());
+    
 
     double omega_x, omega_y, omega_z; // Angular velocity components
     omega_x = errorRotationAxisAngle.angle() * errorRotationAxisAngle.axis()[0];
     omega_y = errorRotationAxisAngle.angle() * errorRotationAxisAngle.axis()[1];
     omega_z = errorRotationAxisAngle.angle() * errorRotationAxisAngle.axis()[2];
 
-    m_angularVelocityDesired << omega_x, omega_y, omega_z;
+    omega_x = std::min(omega_x,2.0);
+    omega_x = std::max(omega_x,-2.0);
+
+    omega_y = std::min(omega_y,2.0);
+    omega_y = std::max(omega_y,-2.0);
+
+    omega_z = std::min(omega_y,2.0);
+    omega_z = std::max(omega_y,-2.0);
+    
+    
+    m_angularVelocityDesired << -omega_x, omega_y, omega_z;
+
+
+
+
 
     return m_angularVelocityDesired;
 };
@@ -415,8 +452,7 @@ void FlightController::CalculateTorque(){
     this->GetErrorRotationMatrix();
     this->GetDesiredAngularVelocity();
     this->GetErrorQuaternion();
-    ROS_INFO_STREAM("The desired Rotation Matrix is ");
-    ROS_INFO_STREAM(m_desiredRotationMatrix);
+
     ROS_INFO_STREAM("The desired angular velocity is ");
     ROS_INFO_STREAM(m_angularVelocityDesired);
 
