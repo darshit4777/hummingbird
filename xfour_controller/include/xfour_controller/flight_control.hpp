@@ -87,6 +87,12 @@ private:
     ros::Subscriber _commandSubscriber;
     ros::Publisher motorCommandPublisher;
 
+    ros::Publisher debugErrorPublisher;
+    ros::Publisher debugDesiredRotationPublisher;
+    ros::Publisher debugDesiredAngularVelocityPublisher;
+    ros::Publisher debugThrustVectorPublisher;
+    ros::Publisher debugTorqueVectorPublisher;
+
 // Listing all methods
 public:
 /** Class constructor */
@@ -100,6 +106,7 @@ void CalculateThrust();
 void CalculateTorque();
 void CalculateMotorRPM();
 void CommandMotorRPM();
+void DebugPublisher();
 double NormalizeAngle(double angle);
 Eigen::Matrix3d GetDesiredRotationMatrix();
 Eigen::Matrix3d GetErrorRotationMatrix();

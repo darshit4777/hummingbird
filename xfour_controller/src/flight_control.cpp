@@ -42,9 +42,9 @@ FlightController::FlightController(ros::NodeHandle* nodehandle)
     
     // Initializing all tunable parameters 
     m_tuningParams.gamma = 20.0;
-    m_tuningParams.k_eta = 0.01;
-    m_tuningParams.k_thrust = 0.001;
-    m_tuningParams.k_sigma = 0.01;
+    m_tuningParams.k_eta = 10.0;
+    m_tuningParams.k_thrust = 1.0;
+    m_tuningParams.k_sigma = 10.0;
     m_loopTime = 0.1;
     m_velocityErrorLimit[0] = 0.1;
     m_velocityErrorLimit[1] = 0.1;
@@ -76,6 +76,11 @@ FlightController::FlightController(ros::NodeHandle* nodehandle)
     _commandSubscriber = _nh.subscribe("/controller_command",10,&FlightController::CommandCallback,this);
 
     motorCommandPublisher = _nh.advertise<mav_msgs::Actuators>("/hummingbird/command/motor_speed",10);
+    debugErrorPublisher = _nh.advertise<geometry_msgs::Pose>("/debug/error",10);
+    debugThrustVectorPublisher = _nh.advertise<geometry_msgs::Pose>("/debug/thrust_vector",10);
+    debugTorqueVectorPublisher = _nh.advertise<geometry_msgs::Pose>("/debug/torque_vector",10);
+    debugDesiredRotationPublisher = _nh.advertise<geometry_msgs::Pose>("/debug/desired_rotation",10);
+    debugDesiredAngularVelocityPublisher = _nh.advertise<geometry_msgs::Pose>("/debug/desired_angular_velocity",10);
 
     return;
 };
@@ -95,34 +100,34 @@ void FlightController::CalculateThrust(){
     velocityCommandedPrevious = TransformMeasuredToControlCoordinates(m_velocity);
     velocityError = velocityCommanded - velocityCommandedPrevious;
 
-    velocityError[0] = std::max(velocityError[0],-0.15);
-    velocityError[0] = std::min(velocityError[0],0.15);
+    velocityError[0] = std::max(velocityError[0],-1.0);
+    velocityError[0] = std::min(velocityError[0],1.0);
 
-    velocityError[1] = std::max(velocityError[1],-0.15);
-    velocityError[1] = std::min(velocityError[1],0.15);
+    velocityError[1] = std::max(velocityError[1],-1.0);
+    velocityError[1] = std::min(velocityError[1],1.0);
     
-    velocityError[2] = std::max(velocityError[2],-0.15);
-    velocityError[2] = std::min(velocityError[2],0.15);
+    velocityError[2] = std::max(velocityError[2],-1.0);
+    velocityError[2] = std::min(velocityError[2],1.0);
     
     
     
-    if ( (velocityError[0] < 0.1 ) && (velocityError[0] > -0.1) ){
+    if ( (velocityError[0] < 0.01 ) && (velocityError[0] > -0.01) ){
         velocityError[0] = 0.0;
     };
 
-    if ( (velocityError[1] < 0.1 ) && (velocityError[1] > -0.1) ){
+    if ( (velocityError[1] < 0.01 ) && (velocityError[1] > -0.01) ){
         velocityError[1] = 0.0;
     };
 
-    if ( (velocityError[2] < 0.1 ) && (velocityError[2] > -0.1) ){
+    if ( (velocityError[2] < 0.01 ) && (velocityError[2] > -0.01) ){
         velocityError[2] = 0.0;
     };
 
     
 
 
-    ROS_INFO_STREAM("Velocity Error");  
-    ROS_INFO_STREAM(velocityError);
+    //ROS_INFO_STREAM("Velocity Error");  
+    //ROS_INFO_STREAM(velocityError);
     velocityCommanded_derivative = (velocityError)/m_loopTime;
     velocityCommanded_derivative[2] = velocityCommanded_derivative[2] - m_g;
     
@@ -131,8 +136,8 @@ void FlightController::CalculateThrust(){
     Eigen::Vector3d saturatedEpsilon;
     // Transforming velocity to the control coordinates before calculating Epsilon
     saturatedEpsilon = CaclulateSaturationEpsilon(velocityCommandedPrevious,velocityCommanded);
-    ROS_INFO_STREAM("Velocity Derivative Term");
-    ROS_INFO_STREAM(-m_mass*velocityCommanded_derivative);
+    //ROS_INFO_STREAM("Velocity Derivative Term");
+    //ROS_INFO_STREAM(-m_mass*velocityCommanded_derivative);
 
     //ROS_INFO_STREAM("Saturated Control Term");
     //ROS_INFO_STREAM(m_tuningParams.k_thrust * saturatedEpsilon);
@@ -188,7 +193,8 @@ Eigen::Vector3d FlightController::CaclulateSaturationEpsilon(Eigen::Vector3d vel
     //ROS_INFO_STREAM(epsilon);
     return epsilon;
         
-}
+};
+
 
 void FlightController::PositionCallback(const geometry_msgs::Pose::ConstPtr& position){
     // Sensor Callback from ground truth or position sensors
@@ -324,8 +330,8 @@ Eigen::Matrix3d FlightController::GetDesiredRotationMatrix(){
     Eigen::Matrix3d desiredRotationMatrix;
     Eigen::Vector3d normalizedThrustVector, orientationVector;
     normalizedThrustVector = m_thrustVector.normalized();
-    ROS_INFO_STREAM("Normalized thrust vector");
-    ROS_INFO_STREAM(normalizedThrustVector);
+    //ROS_INFO_STREAM("Normalized thrust vector");
+    //ROS_INFO_STREAM(normalizedThrustVector);
     
     orientationVector = GetOrientationVectorFromQuaternion(m_orientationQuaternion);
     
@@ -614,7 +620,96 @@ void FlightController::CommandMotorRPM(){
     motorCommandPublisher.publish(rpmCommand);
 
     return;
-}
+};
+
+void FlightController::DebugPublisher(){
+    /**
+     * This method publishes a variety of topics in order to debug the working of the control
+     * algorithm
+     */
+
+    // Publishing the Error Vector
+    geometry_msgs::Pose rotationError;
+    rotationError.position.x = 0.0;
+    rotationError.position.y = 0.0;
+    rotationError.position.z = 0.0; 
+    rotationError.orientation.x = m_errorQuaternion.x();
+    rotationError.orientation.y = m_errorQuaternion.y();
+    rotationError.orientation.z = m_errorQuaternion.z();
+    rotationError.orientation.w = m_errorQuaternion.w();
+    
+    debugErrorPublisher.publish(rotationError);
+
+    // Publishing the desired rotation 
+    Eigen::Quaterniond desiredRotationQuaternion(m_desiredRotationMatrix);
+    geometry_msgs::Pose desiredRotation;
+    desiredRotation.position.x = 0.0;
+    desiredRotation.position.y = 0.0;
+    desiredRotation.position.z = 0.0;
+    desiredRotation.orientation.x = desiredRotationQuaternion.x();
+    desiredRotation.orientation.y = desiredRotationQuaternion.y();
+    desiredRotation.orientation.z = desiredRotationQuaternion.z();
+    desiredRotation.orientation.w = desiredRotationQuaternion.w();
+
+    debugDesiredRotationPublisher.publish(desiredRotation);
+
+    // Publishing the desired angular velocity
+    Eigen::Vector3d xAxis,yAxis,zAxis; 
+    xAxis << 1.0 , 0.0 , 0.0;
+    yAxis << 0.0 , 1.0 , 0.0;
+    zAxis << 0.0 , 0.0 , 1.0;
+    Eigen::Matrix3d desiredAngularVelocityMatrix;
+    desiredAngularVelocityMatrix = Eigen::AngleAxisd(m_angularVelocityDesired[0],zAxis) * Eigen::AngleAxisd(m_angularVelocityDesired[1],yAxis)*
+    Eigen::AngleAxisd(m_angularVelocityDesired[2],xAxis);  
+    Eigen::Quaterniond desiredAngularVelocityQuaternion(desiredAngularVelocityMatrix);
+
+    geometry_msgs::Pose desiredAngularVelocity;
+    desiredAngularVelocity.position.x = 0.0;
+    desiredAngularVelocity.position.y = 0.0;
+    desiredAngularVelocity.position.z = 0.0;
+    desiredAngularVelocity.orientation.x = desiredAngularVelocityQuaternion.x();
+    desiredAngularVelocity.orientation.y = desiredAngularVelocityQuaternion.y();
+    desiredAngularVelocity.orientation.z = desiredAngularVelocityQuaternion.z();
+    desiredAngularVelocity.orientation.w = desiredAngularVelocityQuaternion.w();
+
+    debugDesiredAngularVelocityPublisher.publish(desiredAngularVelocity);
+
+    // Publising the thrust vector
+    Eigen::Matrix3d thrustVectorMatrix;
+    thrustVectorMatrix = Eigen::AngleAxisd(m_thrustVector[0],zAxis) * Eigen::AngleAxisd(m_thrustVector[1],yAxis)*
+    Eigen::AngleAxisd(m_thrustVector[2],xAxis);  
+    Eigen::Quaterniond thrustVectorQuaternion(thrustVectorMatrix);
+
+    geometry_msgs::Pose thrustVector;
+    thrustVector.position.x = 0.0;
+    thrustVector.position.y = 0.0;
+    thrustVector.position.z = 0.0;
+    thrustVector.orientation.x = thrustVectorQuaternion.x();
+    thrustVector.orientation.y = thrustVectorQuaternion.y();
+    thrustVector.orientation.z = thrustVectorQuaternion.z();
+    thrustVector.orientation.w = thrustVectorQuaternion.w();
+
+    debugThrustVectorPublisher.publish(thrustVector);
+
+    // Publising the thrust vector
+    Eigen::Matrix3d torqueVectorMatrix;
+    torqueVectorMatrix = Eigen::AngleAxisd(m_torqueVector[0],zAxis) * Eigen::AngleAxisd(m_torqueVector[1],yAxis)*
+    Eigen::AngleAxisd(m_torqueVector[2],xAxis);  
+    Eigen::Quaterniond torqueVectorQuaternion(torqueVectorMatrix);
+
+    geometry_msgs::Pose torqueVector;
+    torqueVector.position.x = 0.0;
+    torqueVector.position.y = 0.0;
+    torqueVector.position.z = 0.0;
+    torqueVector.orientation.x = torqueVectorQuaternion.x();
+    torqueVector.orientation.y = torqueVectorQuaternion.y();
+    torqueVector.orientation.z = torqueVectorQuaternion.z();
+    torqueVector.orientation.w = torqueVectorQuaternion.w();
+
+    debugTorqueVectorPublisher.publish(torqueVector);
+
+    return;
+};
 
 
 /** TODO 
@@ -634,12 +729,13 @@ int main(int argc, char **argv){
     ros::init(argc,argv,"flight_control");
     ros::NodeHandle nh;
     FlightController HummingBirdController(&nh);
-    ros::Rate r(10);
+    ros::Rate r(200);
     while(ros::ok()){
         HummingBirdController.CalculateThrust();
         HummingBirdController.CalculateTorque();
         HummingBirdController.CalculateMotorRPM();
         HummingBirdController.CommandMotorRPM();
+        HummingBirdController.DebugPublisher();
         ROS_INFO("The commanded thrust is %f",HummingBirdController.m_thrust);
         ROS_INFO_STREAM("The commanded torque vector is ");
         ROS_INFO_STREAM(HummingBirdController.m_torqueVector);
