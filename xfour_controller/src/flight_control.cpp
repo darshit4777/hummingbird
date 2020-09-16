@@ -42,9 +42,9 @@ FlightController::FlightController(ros::NodeHandle* nodehandle)
     
     // Initializing all tunable parameters 
     m_tuningParams.gamma = 20.0;
-    m_tuningParams.k_eta = 10.0;
+    m_tuningParams.k_eta = 5.0;
     m_tuningParams.k_thrust = 1.0;
-    m_tuningParams.k_sigma = 10.0;
+    m_tuningParams.k_sigma = 5.0;
     m_loopTime = 0.1;
     m_velocityErrorLimit[0] = 0.1;
     m_velocityErrorLimit[1] = 0.1;
@@ -76,11 +76,11 @@ FlightController::FlightController(ros::NodeHandle* nodehandle)
     _commandSubscriber = _nh.subscribe("/controller_command",10,&FlightController::CommandCallback,this);
 
     motorCommandPublisher = _nh.advertise<mav_msgs::Actuators>("/hummingbird/command/motor_speed",10);
-    debugErrorPublisher = _nh.advertise<geometry_msgs::Pose>("/debug/error",10);
-    debugThrustVectorPublisher = _nh.advertise<geometry_msgs::Pose>("/debug/thrust_vector",10);
-    debugTorqueVectorPublisher = _nh.advertise<geometry_msgs::Pose>("/debug/torque_vector",10);
-    debugDesiredRotationPublisher = _nh.advertise<geometry_msgs::Pose>("/debug/desired_rotation",10);
-    debugDesiredAngularVelocityPublisher = _nh.advertise<geometry_msgs::Pose>("/debug/desired_angular_velocity",10);
+    debugErrorPublisher = _nh.advertise<geometry_msgs::PoseStamped>("/debug/error",10);
+    debugThrustVectorPublisher = _nh.advertise<geometry_msgs::PoseStamped>("/debug/thrust_vector",10);
+    debugTorqueVectorPublisher = _nh.advertise<geometry_msgs::PoseStamped>("/debug/torque_vector",10);
+    debugDesiredRotationPublisher = _nh.advertise<geometry_msgs::PoseStamped>("/debug/desired_rotation",10);
+    debugDesiredAngularVelocityPublisher = _nh.advertise<geometry_msgs::PoseStamped>("/debug/desired_angular_velocity",10);
 
     return;
 };
@@ -629,28 +629,30 @@ void FlightController::DebugPublisher(){
      */
 
     // Publishing the Error Vector
-    geometry_msgs::Pose rotationError;
-    rotationError.position.x = 0.0;
-    rotationError.position.y = 0.0;
-    rotationError.position.z = 0.0; 
-    rotationError.orientation.x = m_errorQuaternion.x();
-    rotationError.orientation.y = m_errorQuaternion.y();
-    rotationError.orientation.z = m_errorQuaternion.z();
-    rotationError.orientation.w = m_errorQuaternion.w();
-    
+    geometry_msgs::PoseStamped rotationError;
+    rotationError.pose.position.x = 0.0;
+    rotationError.pose.position.y = 0.0;
+    rotationError.pose.position.z = 0.0; 
+    rotationError.pose.orientation.x = m_errorQuaternion.x();
+    rotationError.pose.orientation.y = m_errorQuaternion.y();
+    rotationError.pose.orientation.z = m_errorQuaternion.z();
+    rotationError.pose.orientation.w = m_errorQuaternion.w();
+    rotationError.header.frame_id = "world";
+    rotationError.header.stamp = ros::Time::now();
     debugErrorPublisher.publish(rotationError);
 
     // Publishing the desired rotation 
     Eigen::Quaterniond desiredRotationQuaternion(m_desiredRotationMatrix);
-    geometry_msgs::Pose desiredRotation;
-    desiredRotation.position.x = 0.0;
-    desiredRotation.position.y = 0.0;
-    desiredRotation.position.z = 0.0;
-    desiredRotation.orientation.x = desiredRotationQuaternion.x();
-    desiredRotation.orientation.y = desiredRotationQuaternion.y();
-    desiredRotation.orientation.z = desiredRotationQuaternion.z();
-    desiredRotation.orientation.w = desiredRotationQuaternion.w();
-
+    geometry_msgs::PoseStamped desiredRotation;
+    desiredRotation.pose.position.x = 0.0;
+    desiredRotation.pose.position.y = 0.0;
+    desiredRotation.pose.position.z = 0.0;
+    desiredRotation.pose.orientation.x = desiredRotationQuaternion.x();
+    desiredRotation.pose.orientation.y = desiredRotationQuaternion.y();
+    desiredRotation.pose.orientation.z = desiredRotationQuaternion.z();
+    desiredRotation.pose.orientation.w = desiredRotationQuaternion.w();
+    desiredRotation.header.frame_id = "world";
+    desiredRotation.header.stamp = ros::Time::now();
     debugDesiredRotationPublisher.publish(desiredRotation);
 
     // Publishing the desired angular velocity
@@ -663,49 +665,56 @@ void FlightController::DebugPublisher(){
     Eigen::AngleAxisd(m_angularVelocityDesired[2],xAxis);  
     Eigen::Quaterniond desiredAngularVelocityQuaternion(desiredAngularVelocityMatrix);
 
-    geometry_msgs::Pose desiredAngularVelocity;
-    desiredAngularVelocity.position.x = 0.0;
-    desiredAngularVelocity.position.y = 0.0;
-    desiredAngularVelocity.position.z = 0.0;
-    desiredAngularVelocity.orientation.x = desiredAngularVelocityQuaternion.x();
-    desiredAngularVelocity.orientation.y = desiredAngularVelocityQuaternion.y();
-    desiredAngularVelocity.orientation.z = desiredAngularVelocityQuaternion.z();
-    desiredAngularVelocity.orientation.w = desiredAngularVelocityQuaternion.w();
-
+    geometry_msgs::PoseStamped desiredAngularVelocity;
+    desiredAngularVelocity.pose.position.x = 0.0;
+    desiredAngularVelocity.pose.position.y = 0.0;
+    desiredAngularVelocity.pose.position.z = 0.0;
+    desiredAngularVelocity.pose.orientation.x = desiredAngularVelocityQuaternion.x();
+    desiredAngularVelocity.pose.orientation.y = desiredAngularVelocityQuaternion.y();
+    desiredAngularVelocity.pose.orientation.z = desiredAngularVelocityQuaternion.z();
+    desiredAngularVelocity.pose.orientation.w = desiredAngularVelocityQuaternion.w();
+    desiredAngularVelocity.header.stamp = ros::Time::now();
+    desiredAngularVelocity.header.frame_id = "world";
     debugDesiredAngularVelocityPublisher.publish(desiredAngularVelocity);
 
     // Publising the thrust vector
     Eigen::Matrix3d thrustVectorMatrix;
-    thrustVectorMatrix = Eigen::AngleAxisd(m_thrustVector[0],zAxis) * Eigen::AngleAxisd(m_thrustVector[1],yAxis)*
-    Eigen::AngleAxisd(m_thrustVector[2],xAxis);  
+    Eigen::Vector3d thrustVectorNormalized;
+    thrustVectorNormalized = m_thrustVector.normalized();
+    thrustVectorMatrix = Eigen::AngleAxisd(thrustVectorNormalized[2],zAxis) * Eigen::AngleAxisd(thrustVectorNormalized[1],yAxis)*
+    Eigen::AngleAxisd(thrustVectorNormalized[0],xAxis);  
     Eigen::Quaterniond thrustVectorQuaternion(thrustVectorMatrix);
 
-    geometry_msgs::Pose thrustVector;
-    thrustVector.position.x = 0.0;
-    thrustVector.position.y = 0.0;
-    thrustVector.position.z = 0.0;
-    thrustVector.orientation.x = thrustVectorQuaternion.x();
-    thrustVector.orientation.y = thrustVectorQuaternion.y();
-    thrustVector.orientation.z = thrustVectorQuaternion.z();
-    thrustVector.orientation.w = thrustVectorQuaternion.w();
-
+    geometry_msgs::PoseStamped thrustVector;
+    thrustVector.pose.position.x = 0.0;
+    thrustVector.pose.position.y = 0.0;
+    thrustVector.pose.position.z = 0.0;
+    thrustVector.pose.orientation.x = thrustVectorQuaternion.x();
+    thrustVector.pose.orientation.y = thrustVectorQuaternion.y();
+    thrustVector.pose.orientation.z = thrustVectorQuaternion.z();
+    thrustVector.pose.orientation.w = thrustVectorQuaternion.w();
+    thrustVector.header.frame_id = "world";
+    thrustVector.header.stamp = ros::Time::now();
     debugThrustVectorPublisher.publish(thrustVector);
 
     // Publising the thrust vector
     Eigen::Matrix3d torqueVectorMatrix;
-    torqueVectorMatrix = Eigen::AngleAxisd(m_torqueVector[0],zAxis) * Eigen::AngleAxisd(m_torqueVector[1],yAxis)*
-    Eigen::AngleAxisd(m_torqueVector[2],xAxis);  
+    Eigen::Vector3d torqueVectorNormalized;
+    torqueVectorNormalized = m_torqueVector.normalized();
+    torqueVectorMatrix = Eigen::AngleAxisd(torqueVectorNormalized[2],zAxis) * Eigen::AngleAxisd(torqueVectorNormalized[1],yAxis)*
+    Eigen::AngleAxisd(torqueVectorNormalized[0],xAxis);  
     Eigen::Quaterniond torqueVectorQuaternion(torqueVectorMatrix);
 
-    geometry_msgs::Pose torqueVector;
-    torqueVector.position.x = 0.0;
-    torqueVector.position.y = 0.0;
-    torqueVector.position.z = 0.0;
-    torqueVector.orientation.x = torqueVectorQuaternion.x();
-    torqueVector.orientation.y = torqueVectorQuaternion.y();
-    torqueVector.orientation.z = torqueVectorQuaternion.z();
-    torqueVector.orientation.w = torqueVectorQuaternion.w();
-
+    geometry_msgs::PoseStamped torqueVector;
+    torqueVector.pose.position.x = 0.0;
+    torqueVector.pose.position.y = 0.0;
+    torqueVector.pose.position.z = 0.0;
+    torqueVector.pose.orientation.x = torqueVectorQuaternion.x();
+    torqueVector.pose.orientation.y = torqueVectorQuaternion.y();
+    torqueVector.pose.orientation.z = torqueVectorQuaternion.z();
+    torqueVector.pose.orientation.w = torqueVectorQuaternion.w();
+    torqueVector.header.frame_id = "world";
+    torqueVector.header.stamp = ros::Time::now();
     debugTorqueVectorPublisher.publish(torqueVector);
 
     return;
@@ -737,8 +746,10 @@ int main(int argc, char **argv){
         HummingBirdController.CommandMotorRPM();
         HummingBirdController.DebugPublisher();
         ROS_INFO("The commanded thrust is %f",HummingBirdController.m_thrust);
-        ROS_INFO_STREAM("The commanded torque vector is ");
-        ROS_INFO_STREAM(HummingBirdController.m_torqueVector);
+        ROS_INFO_STREAM(HummingBirdController.m_thrustVector);
+
+        //ROS_INFO_STREAM("The commanded torque vector is ");
+        //ROS_INFO_STREAM(HummingBirdController.m_torqueVector);
         r.sleep();
         ros::spinOnce();    
     };
