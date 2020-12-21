@@ -1,0 +1,5 @@
+<launch>
+    <!-- Loading rosparams for controller tuning -->
+    <rosparam command="load" file="$(find xfour_controller)/config/tuning_params.yaml" />
+    <node name="flight_control_node" pkg="xfour_controller" type="flight_control_node" output="screen" />
+</launch>

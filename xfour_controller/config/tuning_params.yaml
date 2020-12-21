@@ -1,0 +1,5 @@
+flight_control_tuning:
+  k_eta : 7.0
+  k_thrust: 5.0
+  k_sigma: 1.0
+  k_gamma: 20.0

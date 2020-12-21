@@ -65,7 +65,9 @@ public:
     Eigen::Matrix3d m_rotationalInertia;            // Rotational inerta of the robot. Ixx, Iyy and Izz
     double m_g;     // Acceleration due to gravity
     double m_propellerOffset;                       // Distance of the propeller from the center of mass
-
+    double m_rotorMass;  // rotor mass
+    double m_rotorRadius; // rotor radius
+    double m_rotorInertia; // rotor inertia
     // Controller Related Variables
     struct tuning_constants{
         double k_eta;
