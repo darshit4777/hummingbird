@@ -1,0 +1,16 @@
+# Python dependencies for IMU Visualizer
+# Install with: pip install -r requirements.txt
+
+# Serial communication
+pyserial>=3.5
+
+# GUI framework
+PyQt5>=5.15.0
+
+# Real-time plotting and 3D visualization
+pyqtgraph>=0.13.0
+PyOpenGL>=3.1.6
+
+# AHRS filters and numerical computations
+ahrs>=0.3.1
+numpy>=1.21.0

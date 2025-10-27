@@ -56,16 +56,45 @@ This directory contains IMU (Inertial Measurement Unit) integration code for the
      - Port existence and permission checking
    - Created README.md in mpu6050 directory for quick reference
 
+5. **Python IMU Visualizer** ✨ NEW
+   - Created full-featured visualization application
+   - Real-time 3D orientation display using quaternions
+   - Live graphs for acceleration and gyroscope data
+   - AHRS filter integration (Madgwick and Mahony)
+   - Configurable filter parameters
+   - Components:
+     - `SerialReader.py`: Arduino serial communication
+     - `AhrsFilter.py`: AHRS filter wrapper with smoothing
+     - `OrientationWidget.py`: 3D OpenGL visualization
+     - `GraphWidget.py`: Real-time PyQtGraph plotting
+     - `ImuVisualizer.py`: Main GUI application
+   - Features:
+     - Switchable filters (Madgwick/Mahony)
+     - Adjustable filter gain
+     - Sample rate monitoring
+     - Port selection GUI
+     - Reset and clear functions
+     - Automatic dependency management
+
 #### File Structure
 ```
 imu/
-├── current_progress.md          # This document
-└── mpu6050/
-    ├── BUILD                     # Bazel build configuration
-    ├── MPU6050Arduino.c          # Arduino firmware
-    ├── Mpu6050Reader.cpp         # C++ reader application
-    ├── run_reader.sh             # Convenience script to build and run
-    └── README.md                 # Quick reference guide
+├── current_progress.md           # This document
+├── mpu6050/                      # MPU6050 reader package
+│   ├── BUILD                     # Bazel build configuration
+│   ├── MPU6050Arduino.c          # Arduino firmware
+│   ├── Mpu6050Reader.cpp         # C++ reader application
+│   ├── run_reader.sh             # Convenience script to build and run
+│   └── README.md                 # Quick reference guide
+└── imu_visualizer/               # Python visualization application
+    ├── ImuVisualizer.py          # Main GUI application
+    ├── SerialReader.py           # Serial communication module
+    ├── AhrsFilter.py             # AHRS filter wrapper
+    ├── OrientationWidget.py      # 3D orientation widget
+    ├── GraphWidget.py            # Real-time graph widgets
+    ├── requirements.txt          # Python dependencies
+    ├── run_visualizer.sh         # Run script
+    └── README.md                 # Visualizer documentation
 ```
 
 #### Hardware Connections
@@ -130,12 +159,46 @@ bazel run //imu/mpu6050:Mpu6050Reader -- /dev/ttyACM0
 2. Select your Arduino board and port
 3. Upload the sketch
 
+**Run IMU Visualizer:**
+```bash
+# Navigate to visualizer directory
+cd imu/imu_visualizer
+
+# Run (automatically installs dependencies)
+./run_visualizer.sh
+```
+
+The visualizer will:
+1. Create a Python virtual environment (first run only)
+2. Install all required packages (first run only)
+3. Launch the GUI application
+
+In the GUI:
+1. Select your serial port from the dropdown
+2. Click "Connect"
+3. Adjust filter type (Madgwick/Mahony) and gain as needed
+4. Watch the 3D orientation and real-time graphs!
+
 #### Dependencies
-- **Arduino:** Wire library (built-in)
-- **C++ Application:**
-  - C++11 compiler (standard library only)
-  - POSIX-compliant OS (Linux/macOS)
-  - Bazel build system (Bazelisk recommended)
+
+**Arduino:**
+- Wire library (built-in)
+
+**C++ Reader:**
+- C++11 compiler (standard library only)
+- POSIX-compliant OS (Linux/macOS)
+- Bazel build system (Bazelisk recommended)
+
+**Python Visualizer:**
+- Python 3.7+
+- PySerial (serial communication)
+- PyQt5 (GUI framework)
+- PyQtGraph (real-time plotting)
+- PyOpenGL (3D graphics)
+- AHRS (orientation filters)
+- NumPy (numerical computations)
+
+All Python dependencies are automatically installed by `run_visualizer.sh`.
 
 **Install Bazelisk (recommended):**
 ```bash
