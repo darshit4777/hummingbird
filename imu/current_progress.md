@@ -76,6 +76,15 @@ This directory contains IMU (Inertial Measurement Unit) integration code for the
      - Reset and clear functions
      - Automatic dependency management
 
+6. **Repository Configuration**
+   - Created comprehensive `.gitignore` at repository root
+   - Ignores: Python artifacts (`__pycache__`, `venv/`)
+   - Ignores: Bazel build artifacts (`bazel-*`)
+   - Ignores: IDE/editor files (VSCode, PyCharm, Vim, etc.)
+   - Ignores: OS-specific files (macOS, Linux, Windows)
+   - Ignores: Build artifacts and temporary files
+   - Project-specific ignores for calibration and config files
+
 #### File Structure
 ```
 imu/
