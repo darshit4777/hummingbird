@@ -1,0 +1,35 @@
+# Bazel configuration for hummingbird project
+
+# Enable WORKSPACE file (required for Bazel 8+)
+common --enable_workspace
+
+# Build settings
+build --cxxopt=-std=c++11
+build --copt=-Wall
+build --copt=-Wextra
+
+# Enable color output
+build --color=yes
+
+# Show test output
+test --test_output=all
+
+# Use all available CPU cores
+build --jobs=auto
+
+# Cache settings
+build --disk_cache=~/.cache/bazel
+
+# C++ specific settings
+build --cxxopt=-O2
+build --cxxopt=-DNDEBUG
+
+# Debug build configuration
+build:debug --copt=-g
+build:debug --copt=-O0
+build:debug --strip=never
+
+# Release build configuration
+build:release --copt=-O3
+build:release --copt=-DNDEBUG
+build:release --strip=always
